@@ -1,0 +1,36 @@
+services:
+  recommendarr:
+    image: recommendarr:latest
+    build: .
+    container_name: recommendarr
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config
+    environment:
+      # History source: Tautulli or Plex
+      Recommendarr__History__Provider: Tautulli
+      Recommendarr__Tautulli__BaseUrl: http://tautulli:8181
+      Recommendarr__Tautulli__ApiKey: changeme
+      Recommendarr__Plex__BaseUrl: http://plex:32400
+      Recommendarr__Plex__Token: changeme
+      # TMDB API Read Access Token (v4)
+      Recommendarr__Tmdb__ApiKey: changeme
+      Recommendarr__Seerr__BaseUrl: http://seerr:5055
+      Recommendarr__Seerr__ApiKey: changeme
+      # Embeddings: Onnx (built in), Ollama, or OpenAI
+      Recommendarr__Embeddings__Provider: Onnx
+      # Recommendarr__Embeddings__Endpoint: http://ollama:11434
+      # Recommendarr__Embeddings__Model: nomic-embed-text
+      # Optional LLM re-ranking
+      Recommendarr__Llm__Enabled: "false"
+      # Recommendarr__Telegram__BotToken: changeme
+      # Recommendarr__Discord__BotToken: changeme
+    restart: unless-stopped
+
+  # Optional: local models for embeddings and/or LLM re-ranking.
+  # ollama:
+  #   image: ollama/ollama
+  #   volumes:
+  #     - ./ollama:/root/.ollama
+  #   restart: unless-stopped

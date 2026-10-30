@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/config/
+**/appsettings.Local.json
+.git/
+.vs/
+.vscode/
+tests/

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Recommendarr.Core/Recommendarr.Core.csproj" />
+    <Project Path="src/Recommendarr.Infrastructure/Recommendarr.Infrastructure.csproj" />
+    <Project Path="src/Recommendarr.Web/Recommendarr.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Recommendarr.Core.Tests/Recommendarr.Core.Tests.csproj" />
+    <Project Path="tests/Recommendarr.Infrastructure.Tests/Recommendarr.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
