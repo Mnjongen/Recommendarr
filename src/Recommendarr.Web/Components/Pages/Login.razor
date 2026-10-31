@@ -1,0 +1,30 @@
+@page "/login"
+@layout CenteredLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>Sign in · Recommendarr</PageTitle>
+
+<div class="card narrow">
+    <h1>What should you watch next?</h1>
+    <p class="muted">Sign in with the Plex account you use for this server. On a shared Plex Home login, you'll pick your profile next.</p>
+
+    @if (Message is not null)
+    {
+        <p class="alert">@Message</p>
+    }
+
+    <a class="button plex" href="/auth/plex/start">Sign in with Plex</a>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] private string? Error { get; set; }
+
+    private string? Message => Error switch
+    {
+        "expired" => "The sign-in took too long. Please try again.",
+        "not-approved" => "Plex didn't confirm the sign-in. Please try again.",
+        "no-access" => "None of this Plex account's profiles use this server yet. If you were just added, try again after the next sync.",
+        null => null,
+        _ => "Something went wrong while signing in.",
+    };
+}

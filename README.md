@@ -39,18 +39,19 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Recommendation__*` | Engine tuning (weights, recency half-life, diversity); see `RecommendationOptions` |
 | `Llm__Enabled` | Turns on optional LLM re-ranking |
 
+## Signing in
+Open the web UI and choose **Sign in with Plex**. If several people share one Plex login through Plex Home, Recommendarr then asks **Who's watching?** and requires the profile PIN when one is set. Only profiles that use this server can sign in. The server owner's profile is the admin: they can see everyone's recommendations, start a sync, and choose the Seerr account for each profile.
+
 ## REST API
-The OpenAPI document is served at `/openapi/v1.json`.
+The OpenAPI document is served at `/openapi/v1.json`. The API uses the same sign-in session as the web UI. A profile can only read and request for itself; the admin can act for everyone.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/v1/users` | Users found in Tautulli or Plex, with their `plexUserId` |
+| `GET /api/v1/users` | (admin) Users found in Tautulli or Plex, with their `plexUserId` |
 | `GET /api/v1/users/{plexUserId}/recommendations?type=Movie\|Tv` | Ranked recommendations, each with a reason and its Seerr availability |
 | `POST /api/v1/users/{plexUserId}/requests` | Request a title in Seerr as that user. Body: `{ "mediaType": "Movie", "tmdbId": 603 }` |
-| `GET /api/v1/seerr/users` | Seerr accounts that a user can be linked to |
-| `PUT /api/v1/users/{plexUserId}/seerr-user` | Choose which Seerr account a user requests as. Body: `{ "seerrUserId": 3 }`; `null` goes back to automatic linking |
-
-> These endpoints have no authentication until Plex sign-in arrives in milestone 5. Don't expose Recommendarr to the internet before then.
+| `GET /api/v1/seerr/users` | (admin) Seerr accounts that a user can be linked to |
+| `PUT /api/v1/users/{plexUserId}/seerr-user` | (admin) Choose which Seerr account a user requests as. Body: `{ "seerrUserId": 3 }`; `null` goes back to automatic linking |
 
 Users are linked to Seerr accounts automatically through their Plex account. Managed Plex Home users have no Seerr account of their own, so an admin picks one for them instead, such as the owner's or a local Seerr user. Requests then use that account's quotas and approval rules. Automatic linking never overrides a manual choice.
 

@@ -46,7 +46,7 @@ public sealed class PlexHistoryProviderTests : IDisposable
 
         Assert.Equal(
             [
-                new PlexUser("111", "owner", "o@example.com", "https://plex.tv/o.png"),
+                new PlexUser("111", "owner", "o@example.com", "https://plex.tv/o.png", IsAdmin: true),
                 new PlexUser("222", "bob", "b@example.com", "https://plex.tv/b.png"),
                 new PlexUser("333", "Kids"),
             ],

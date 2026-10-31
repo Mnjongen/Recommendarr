@@ -147,7 +147,8 @@ public sealed class PlexHistoryProvider : IWatchHistoryProvider
             id,
             NullIfEmpty(u.GetStringOrNull("username")) ?? NullIfEmpty(u.GetStringOrNull("title")) ?? id,
             NullIfEmpty(u.GetStringOrNull("email")),
-            NullIfEmpty(u.GetStringOrNull("thumb")));
+            NullIfEmpty(u.GetStringOrNull("thumb")),
+            IsAdmin: true);
     }
 
     /// <summary>GETs a path on the Plex server; returns null on 404.</summary>

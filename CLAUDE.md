@@ -47,7 +47,10 @@ Tuning knobs live in `RecommendationOptions`. Component scores are min-max norma
 
 ### Integrations
 - Seerr requests are made as the end user: admin API key plus the `X-Api-User` header, so Seerr's quotas and approval rules still apply. `SeerrService` links users by Seerr's `plexId`, which is the plex.tv id and the same as our `PlexUserId`. An admin can instead pin a user to any Seerr account (`Users.SeerrUserSetManually`), which automatic linking leaves untouched. This is needed for managed Plex Home users, who can't have their own Seerr account. It also refreshes the stored `Recommendations.Availability` after every sync and after each request. The Seerr HttpClient never retries POSTs, because a retry could file the same request twice.
-- Users sign in with Plex OAuth (PIN flow). The Plex server owner is the admin.
+- Users sign in with Plex OAuth (PIN flow) in two stages (`Web/Auth`). Stage 1: `/auth/plex/start` → app.plex.tv → `/auth/plex/callback` produces a *pending* cookie that holds the account token. Stage 2: "Who's watching?" (`/profiles`) lists the account's Plex Home profiles that are known users, and checks protected ones with `POST plex.tv/api/home/users/{id}/switch?pin=`. It then signs in the *profile* and drops the token. The default authorization policy requires the profile stage. The admin is the profile whose `UserEntity.IsAdmin` is set (the server owner, from Tautulli `is_admin` or the Plex owner).
+- The API uses the same cookie. Use `ClaimsPrincipal.CanActFor(plexUserId)` for per-user endpoints and `AuthConstants.AdminPolicy` for admin ones. Status-code pages skip `/api`.
+- Interactive components must not hold a DbContext across events; create a scope per operation (`IServiceScopeFactory`).
+- `tests/Recommendarr.Web.Tests` boots the app with `WebApplicationFactory` in the `Testing` environment, which skips `appsettings.Local.json`. It authenticates through `TestAuthHandler` (`X-Test-Profile: 1`, `2,admin` or `pending`).
 - `PlexUserId` is the plex.tv account id everywhere (Tautulli's `user_id` uses the same id). The one exception is the Plex server's history API, where the owner is account `1`; `PlexHistoryProvider` maps this.
 - Tests stub HTTP with WireMock.Net. WireMock splits comma-separated query values, so assert those against `RequestMessage.AbsoluteUrl`.
 

@@ -32,7 +32,7 @@ public sealed class TautulliHistoryProvider(HttpClient http, IOptions<TautulliOp
                 continue;
             var username = NullIfEmpty(u.GetStringOrNull("username")) ?? NullIfEmpty(u.GetStringOrNull("friendly_name")) ?? id;
             var thumb = NullIfEmpty(u.GetStringOrNull("thumb")) ?? NullIfEmpty(u.GetStringOrNull("user_thumb"));
-            users.Add(new PlexUser(id, username, NullIfEmpty(u.GetStringOrNull("email")), thumb));
+            users.Add(new PlexUser(id, username, NullIfEmpty(u.GetStringOrNull("email")), thumb, u.GetInt64OrNull("is_admin") == 1));
         }
         return users;
     }

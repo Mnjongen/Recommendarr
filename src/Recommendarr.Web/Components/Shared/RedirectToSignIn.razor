@@ -1,0 +1,28 @@
+@* Shown when a page needs more than the visitor has: sign-in, a picked profile, or admin rights. *@
+@inject NavigationManager Navigation
+
+@if (_denied)
+{
+    <div class="empty-state">
+        <h1>Not allowed</h1>
+        <p>This page is only for the admin.</p>
+        <a class="button" href="/">Back to recommendations</a>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = null!;
+
+    private bool _denied;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        if (user.Identity?.IsAuthenticated != true)
+            Navigation.NavigateTo("/login", forceLoad: true);
+        else if (user.HasClaim(AuthConstants.StageClaim, AuthConstants.PendingStage))
+            Navigation.NavigateTo("/profiles", forceLoad: true);
+        else
+            _denied = true;
+    }
+}

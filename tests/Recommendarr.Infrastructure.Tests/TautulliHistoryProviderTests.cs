@@ -35,7 +35,7 @@ public sealed class TautulliHistoryProviderTests : IDisposable
         Respond("get_users", """
             [
               { "user_id": 0, "username": "Local", "friendly_name": "Local" },
-              { "user_id": 1234, "username": "alice", "email": "a@example.com", "thumb": "https://plex.tv/a.png" },
+              { "user_id": 1234, "username": "alice", "email": "a@example.com", "thumb": "https://plex.tv/a.png", "is_admin": 1 },
               { "user_id": "5678", "username": "", "friendly_name": "Kids", "email": "" }
             ]
             """);
@@ -43,7 +43,7 @@ public sealed class TautulliHistoryProviderTests : IDisposable
         var users = await CreateProvider().GetUsersAsync();
 
         Assert.Equal(
-            [new PlexUser("1234", "alice", "a@example.com", "https://plex.tv/a.png"), new PlexUser("5678", "Kids")],
+            [new PlexUser("1234", "alice", "a@example.com", "https://plex.tv/a.png", IsAdmin: true), new PlexUser("5678", "Kids")],
             users);
     }
 

@@ -11,6 +11,7 @@ using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Embeddings;
 using Recommendarr.Infrastructure.History;
 using Recommendarr.Infrastructure.Options;
+using Recommendarr.Infrastructure.Plex;
 using Recommendarr.Infrastructure.Seerr;
 using Recommendarr.Infrastructure.Sync;
 using Recommendarr.Infrastructure.Tmdb;
@@ -67,6 +68,10 @@ public static class DependencyInjection
         services.AddHttpClient<ISeerrClient, SeerrClient>()
             .AddStandardResilienceHandler(o => o.Retry.DisableForUnsafeHttpMethods());
         services.AddScoped<SeerrService>();
+
+        // plex.tv sign-in. Creating a PIN is a POST, so it must never be retried.
+        services.AddHttpClient<PlexAuthClient>()
+            .AddStandardResilienceHandler(o => o.Retry.DisableForUnsafeHttpMethods());
 
         return services;
     }

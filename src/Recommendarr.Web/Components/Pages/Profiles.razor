@@ -1,0 +1,63 @@
+@page "/profiles"
+@layout CenteredLayout
+@attribute [Authorize(Policy = AuthConstants.PendingProfilePolicy)]
+@using System.Security.Claims
+@inject ProfileService ProfileService
+
+<PageTitle>Who's watching? · Recommendarr</PageTitle>
+
+<h1>Who's watching?</h1>
+
+@if (_profiles is null)
+{
+    <p class="muted">Loading profiles…</p>
+}
+else
+{
+    <div class="profiles">
+        @foreach (var profile in _profiles)
+        {
+            var askPin = profile.Protected;
+            <form method="post" action="/auth/profile" class="profile-card @(ErrorFor(profile) ? "has-error" : "")">
+                <AntiforgeryToken />
+                <input type="hidden" name="profileId" value="@profile.PlexUserId" />
+                @if (profile.ThumbUrl is not null)
+                {
+                    <img class="avatar large" src="@profile.ThumbUrl" alt="" />
+                }
+                else
+                {
+                    <div class="avatar large placeholder">@profile.Name[..1]</div>
+                }
+                <div class="name">@profile.Name @(profile.IsAdmin ? "(admin)" : "")</div>
+                @if (askPin)
+                {
+                    <input name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="PIN" aria-label="PIN for @profile.Name" />
+                    @if (ErrorFor(profile))
+                    {
+                        <div class="alert small">Wrong PIN</div>
+                    }
+                }
+                <button type="submit" class="button">@(askPin ? "Unlock" : "Continue")</button>
+            </form>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = null!;
+
+    [SupplyParameterFromQuery] private string? Error { get; set; }
+
+    [SupplyParameterFromQuery] private string? Profile { get; set; }
+
+    private IReadOnlyList<ProfileOption>? _profiles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var token = HttpContext.User.FindFirstValue(AuthConstants.PlexTokenClaim);
+        _profiles = token is null ? [] : await ProfileService.GetProfilesAsync(token, HttpContext.RequestAborted);
+    }
+
+    private bool ErrorFor(ProfileOption profile) => Error == "pin" && Profile == profile.PlexUserId;
+}

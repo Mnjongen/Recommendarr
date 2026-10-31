@@ -1,0 +1,56 @@
+<article class="rec-card">
+    <div class="poster">
+        @if (Item.PosterUrl is not null)
+        {
+            <img src="@Item.PosterUrl" alt="" loading="lazy" />
+        }
+        else
+        {
+            <div class="poster-placeholder">@Item.Title</div>
+        }
+        @if (Badge is { } badge)
+        {
+            <span class="badge @badge.Css">@badge.Label</span>
+        }
+    </div>
+    <div class="body">
+        <h3>@Item.Title @if (Item.Year is not null) { <span class="year">(@Item.Year)</span> }</h3>
+        <div class="meta">
+            @if (Item.VoteAverage > 0) { <span>★ @Item.VoteAverage.ToString("0.0")</span> }
+            @foreach (var genre in Item.Genres.Take(2)) { <span>@genre</span> }
+        </div>
+        @if (Item.Reason is not null)
+        {
+            <p class="reason">@Item.Reason</p>
+        }
+        @if (Item.Overview is not null)
+        {
+            <p class="overview">@Item.Overview</p>
+        }
+        @if (Item.CanRequest && CanRequest)
+        {
+            <button class="button small" disabled="@Busy" @onclick="OnRequest">@(Busy ? "Requesting…" : "Request")</button>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public RecommendationView Item { get; set; } = null!;
+
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>False when Seerr isn't configured.</summary>
+    [Parameter] public bool CanRequest { get; set; } = true;
+
+    [Parameter] public EventCallback OnRequest { get; set; }
+
+    private (string Label, string Css)? Badge => Item.Availability switch
+    {
+        AvailabilityStatus.Available => ("On Plex", "available"),
+        AvailabilityStatus.PartiallyAvailable => ("Partly on Plex", "available"),
+        AvailabilityStatus.Processing => ("Requested", "requested"),
+        AvailabilityStatus.Pending => ("Awaiting approval", "pending"),
+        AvailabilityStatus.Blacklisted => ("Blocked", "blocked"),
+        _ => null,
+    };
+}

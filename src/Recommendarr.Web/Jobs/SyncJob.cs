@@ -18,6 +18,7 @@ public sealed class SyncJob(
     IOptions<TautulliOptions> tautulliOptions,
     IOptions<PlexOptions> plexOptions,
     IOptions<TmdbOptions> tmdbOptions,
+    SyncCoordinator coordinator,
     TimeProvider time,
     ILogger<SyncJob> logger) : BackgroundService
 {
@@ -31,9 +32,28 @@ public sealed class SyncJob(
             if (syncOptions.Value.RunOnStartup)
                 await SafeRunOnceAsync(stoppingToken);
 
+            // Run on every timer tick and whenever the UI asks. Each wait is kept until it completes,
+            // because a PeriodicTimer allows only one pending WaitForNextTickAsync.
             using var timer = new PeriodicTimer(syncOptions.Value.Interval, time);
-            while (await timer.WaitForNextTickAsync(stoppingToken))
+            Task<bool>? tick = null, requested = null;
+            while (true)
+            {
+                tick ??= timer.WaitForNextTickAsync(stoppingToken).AsTask();
+                requested ??= coordinator.Requests.WaitToReadAsync(stoppingToken).AsTask();
+                if (await Task.WhenAny(tick, requested) == tick)
+                {
+                    if (!await tick)
+                        break;
+                    tick = null;
+                }
+                else
+                {
+                    await requested;
+                    coordinator.Requests.TryRead(out _);
+                    requested = null;
+                }
                 await SafeRunOnceAsync(stoppingToken);
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -43,6 +63,7 @@ public sealed class SyncJob(
     /// <summary>An unhandled exception would stop the whole host, so log it and wait for the next tick.</summary>
     private async Task SafeRunOnceAsync(CancellationToken ct)
     {
+        coordinator.SetRunning(true);
         try
         {
             await RunOnceAsync(ct);
@@ -50,6 +71,10 @@ public sealed class SyncJob(
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Sync job crashed");
+        }
+        finally
+        {
+            coordinator.SetRunning(false);
         }
     }
 

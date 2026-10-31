@@ -1,7 +1,146 @@
 ﻿@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Recommendarr.Infrastructure.Data
+@using Recommendarr.Infrastructure.Seerr
+@inject IServiceScopeFactory Scopes
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Recommendations · Recommendarr</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="page-header">
+    <h1>@(_plexUserId == _ownId ? "Recommended for you" : $"Recommended for {UserName(_plexUserId)}")</h1>
+    <div class="controls">
+        @if (_users is not null)
+        {
+            <label>
+                Viewing
+                <select value="@_plexUserId" @onchange="ChangeUserAsync">
+                    @foreach (var (id, name) in _users)
+                    {
+                        <option value="@id">@name</option>
+                    }
+                </select>
+            </label>
+        }
+        <div class="tabs" role="tablist">
+            <button role="tab" class="@(_type == MediaType.Movie ? "active" : "")" @onclick="() => _type = MediaType.Movie">Movies (@Count(MediaType.Movie))</button>
+            <button role="tab" class="@(_type == MediaType.Tv ? "active" : "")" @onclick="() => _type = MediaType.Tv">TV shows (@Count(MediaType.Tv))</button>
+        </div>
+    </div>
+</div>
 
-Welcome to your new app.
+@if (_message is not null)
+{
+    <div class="toast @(_messageIsError ? "error" : "")" @onclick="() => _message = null">@_message</div>
+}
+
+@if (_items is null)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_items.Count == 0)
+{
+    <div class="empty-state">
+        <p>No recommendations yet. They appear after the next sync, once there's something in the watch history.</p>
+    </div>
+}
+else
+{
+    <div class="grid">
+        @foreach (var item in _items.Where(i => i.MediaType == _type))
+        {
+            <RecommendationCard Item="item" Busy="_busy.Contains(item.TmdbId)" CanRequest="_seerrConfigured" OnRequest="() => RequestAsync(item)" />
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = null!;
+
+    private string _ownId = "";
+    private string _plexUserId = "";
+    private List<(string Id, string Name)>? _users;
+    private List<RecommendationView>? _items;
+    private MediaType _type = MediaType.Movie;
+    private readonly HashSet<int> _busy = [];
+    private bool _seerrConfigured;
+    private string? _message;
+    private bool _messageIsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        _ownId = _plexUserId = user.PlexUserId() ?? "";
+
+        await using var scope = Scopes.CreateAsyncScope();
+        _seerrConfigured = scope.ServiceProvider.GetRequiredService<SeerrService>().IsConfigured;
+        if (user.IsAdmin())
+        {
+            // The admin can look at (and request for) every profile, which helps when tuning.
+            _users = (await scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>().Users.AsNoTracking()
+                    .OrderBy(u => u.Username)
+                    .Select(u => new { u.PlexUserId, u.Username })
+                    .ToListAsync())
+                .Select(u => (u.PlexUserId, u.Username))
+                .ToList();
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        _items = (await scope.ServiceProvider.GetRequiredService<RecommendationReader>().GetAsync(_plexUserId, null))?.ToList() ?? [];
+        if (_items.Count > 0 && _items.All(i => i.MediaType != _type))
+            _type = _items[0].MediaType;
+    }
+
+    private async Task ChangeUserAsync(ChangeEventArgs e)
+    {
+        var user = (await AuthState).User;
+        if (e.Value is string id && user.CanActFor(id))
+        {
+            _plexUserId = id;
+            _items = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task RequestAsync(RecommendationView item)
+    {
+        var user = (await AuthState).User;
+        if (!user.CanActFor(_plexUserId) || !_busy.Add(item.TmdbId))
+            return;
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var outcome = await scope.ServiceProvider.GetRequiredService<SeerrService>()
+                .RequestAsync(_plexUserId, item.MediaType, item.TmdbId, "web");
+            if (outcome.Kind == RequestOutcomeKind.Created)
+            {
+                var index = _items!.IndexOf(item);
+                _items[index] = item with { Availability = outcome.Availability ?? AvailabilityStatus.Pending };
+                ShowMessage($"Requested {item.Title}.", error: false);
+            }
+            else
+            {
+                ShowMessage(outcome.Error ?? $"Couldn't request {item.Title}.", error: true);
+            }
+        }
+        catch (Exception)
+        {
+            ShowMessage($"Couldn't reach Seerr to request {item.Title}. Try again later.", error: true);
+        }
+        finally
+        {
+            _busy.Remove(item.TmdbId);
+        }
+    }
+
+    private void ShowMessage(string message, bool error) => (_message, _messageIsError) = (message, error);
+
+    private int Count(MediaType type) => _items?.Count(i => i.MediaType == type) ?? 0;
+
+    private string UserName(string id) => _users?.FirstOrDefault(u => u.Id == id).Name ?? id;
+}

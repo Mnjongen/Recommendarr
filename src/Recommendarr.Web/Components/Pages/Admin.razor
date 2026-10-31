@@ -1,0 +1,163 @@
+@page "/admin"
+@attribute [Authorize(Policy = AuthConstants.AdminPolicy)]
+@rendermode InteractiveServer
+@implements IDisposable
+@using Microsoft.EntityFrameworkCore
+@using Recommendarr.Infrastructure.Data
+@using Recommendarr.Infrastructure.Seerr
+@using Recommendarr.Web.Jobs
+@inject IServiceScopeFactory Scopes
+@inject SyncCoordinator Sync
+
+<PageTitle>Admin · Recommendarr</PageTitle>
+
+<h1>Admin</h1>
+
+@if (_message is not null)
+{
+    <div class="toast @(_messageIsError ? "error" : "")" @onclick="() => _message = null">@_message</div>
+}
+
+<section class="panel">
+    <div class="panel-header">
+        <h2>Sync</h2>
+        <button class="button" disabled="@Sync.IsRunning" @onclick="Sync.RequestRun">@(Sync.IsRunning ? "Syncing…" : "Sync now")</button>
+    </div>
+    <p class="muted">Imports watch history, refreshes TMDB data, and rebuilds everyone's recommendations.</p>
+    @if (_runs is { Count: > 0 })
+    {
+        <table>
+            <thead><tr><th>Started</th><th>Took</th><th>Result</th></tr></thead>
+            <tbody>
+                @foreach (var run in _runs)
+                {
+                    <tr>
+                        <td>@run.StartedAt.ToLocalTime().ToString("g")</td>
+                        <td>@(run.FinishedAt is { } end ? $"{(end - run.StartedAt).TotalSeconds:0}s" : "running")</td>
+                        <td class="@(run.FinishedAt is null ? "" : run.Success ? "ok" : "failed")">@run.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="panel">
+    <h2>Users</h2>
+    <p class="muted">
+        Requests are made in Seerr as the linked account, so its quotas and approval rules apply.
+        Managed Plex Home profiles have no Seerr account of their own: pick one for them.
+    </p>
+    @if (_users is not null)
+    {
+        <table>
+            <thead><tr><th>Profile</th><th>Plays</th><th>Recommendations</th><th>Last history sync</th><th>Seerr account</th></tr></thead>
+            <tbody>
+                @foreach (var user in _users)
+                {
+                    <tr>
+                        <td>@user.Username @if (user.IsAdmin) { <span class="tag">admin</span> }</td>
+                        <td>@user.Plays</td>
+                        <td>@user.Recommendations</td>
+                        <td>@(user.LastHistorySync?.ToLocalTime().ToString("g") ?? "never")</td>
+                        <td>
+                            @if (_seerrUsers is null)
+                            {
+                                <span class="muted">Seerr not configured</span>
+                            }
+                            else
+                            {
+                                <select value="@(user.SeerrUserSetManually ? user.SeerrUserId?.ToString() : "")" @onchange="e => SetSeerrUserAsync(user, e)">
+                                    <option value="">Automatic: @AutomaticLabel(user)</option>
+                                    @foreach (var seerrUser in _seerrUsers)
+                                    {
+                                        <option value="@seerrUser.Id">@seerrUser.DisplayName</option>
+                                    }
+                                </select>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private sealed record UserRow(string PlexUserId, string Username, bool IsAdmin, int Plays, int Recommendations, DateTimeOffset? LastHistorySync, int? SeerrUserId, bool SeerrUserSetManually);
+
+    private List<UserRow>? _users;
+    private IReadOnlyList<SeerrUser>? _seerrUsers;
+    private List<JobRunEntity>? _runs;
+    private string? _message;
+    private bool _messageIsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Sync.StateChanged += OnSyncStateChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>();
+        _users = await db.Users.AsNoTracking()
+            .OrderByDescending(u => u.IsAdmin).ThenBy(u => u.Username)
+            .Select(u => new UserRow(
+                u.PlexUserId,
+                u.Username,
+                u.IsAdmin,
+                db.WatchEvents.Count(w => w.UserId == u.Id),
+                db.Recommendations.Count(r => r.UserId == u.Id),
+                u.LastHistorySync,
+                u.SeerrUserId,
+                u.SeerrUserSetManually))
+            .ToListAsync();
+        _runs = await db.JobRuns.AsNoTracking().OrderByDescending(r => r.Id).Take(10).ToListAsync();
+
+        var seerr = scope.ServiceProvider.GetRequiredService<SeerrService>();
+        try
+        {
+            _seerrUsers = seerr.IsConfigured ? await seerr.GetSeerrUsersAsync() : null;
+        }
+        catch (Exception)
+        {
+            _seerrUsers = null;
+            ShowMessage("Couldn't reach Seerr to list its accounts.", error: true);
+        }
+    }
+
+    private async Task SetSeerrUserAsync(UserRow user, ChangeEventArgs e)
+    {
+        int? seerrUserId = int.TryParse(e.Value as string, out var id) ? id : null;
+        await using var scope = Scopes.CreateAsyncScope();
+        var outcome = await scope.ServiceProvider.GetRequiredService<SeerrService>().SetSeerrUserAsync(user.PlexUserId, seerrUserId);
+        if (outcome == SeerrLinkOutcome.Updated)
+        {
+            var account = seerrUserId is null ? "automatic linking" : _seerrUsers?.FirstOrDefault(s => s.Id == seerrUserId)?.DisplayName;
+            ShowMessage($"{user.Username} now requests via {account}.", error: false);
+        }
+        else
+        {
+            ShowMessage($"Couldn't update {user.Username}: {outcome}.", error: true);
+        }
+        await LoadAsync();
+    }
+
+    /// <summary>What automatic linking found (only meaningful when no account was picked by hand).</summary>
+    private string AutomaticLabel(UserRow user) =>
+        !user.SeerrUserSetManually && user.SeerrUserId is { } id
+            ? _seerrUsers?.FirstOrDefault(s => s.Id == id)?.DisplayName ?? $"#{id}"
+            : "no matching account";
+
+    private void OnSyncStateChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private void ShowMessage(string message, bool error) => (_message, _messageIsError) = (message, error);
+
+    public void Dispose() => Sync.StateChanged -= OnSyncStateChanged;
+}

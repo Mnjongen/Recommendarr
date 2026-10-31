@@ -117,6 +117,7 @@ public sealed class HistorySyncService(
             user.Username = p.Username;
             user.Email = p.Email;
             user.ThumbUrl = p.ThumbUrl;
+            user.IsAdmin = p.IsAdmin;
             users.Add(user);
         }
         await db.SaveChangesAsync(ct);

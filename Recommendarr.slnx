@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Recommendarr.Core.Tests/Recommendarr.Core.Tests.csproj" />
     <Project Path="tests/Recommendarr.Infrastructure.Tests/Recommendarr.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Recommendarr.Web.Tests/Recommendarr.Web.Tests.csproj" />
   </Folder>
 </Solution>

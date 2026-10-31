@@ -1,0 +1,22 @@
+@page "/access-denied"
+@attribute [AllowAnonymous]
+@inject NavigationManager Navigation
+
+<PageTitle>Not allowed · Recommendarr</PageTitle>
+
+<div class="empty-state">
+    <h1>Not allowed</h1>
+    <p>This page is only for the admin.</p>
+    <a class="button" href="/">Back to recommendations</a>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        // Signed in with Plex but no profile picked yet: that's not "denied", just unfinished.
+        if (HttpContext.User.HasClaim(AuthConstants.StageClaim, AuthConstants.PendingStage))
+            Navigation.NavigateTo("/profiles");
+    }
+}
