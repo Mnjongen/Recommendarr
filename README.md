@@ -21,7 +21,7 @@ Recommendarr is a self-hosted "what to watch next" recommender for Plex. It work
 cp docker-compose.example.yml docker-compose.yml   # fill in URLs and API keys
 docker compose up -d
 ```
-The app listens on port 8080. Data (the SQLite database and downloaded models) is stored in the `/config` volume.
+Images are published to `ghcr.io/mnjongen/recommendarr` for amd64 and arm64. The app listens on port 8080. Data (the SQLite database and downloaded models) is stored in the `/config` volume.
 
 ## Configuration
 All settings live under the `Recommendarr` section, so any of them can be set as an environment variable using `__` as the separator. For example, `Recommendarr__Tmdb__ApiKey`. See [appsettings.json](src/Recommendarr.Web/appsettings.json) for every key.
@@ -45,6 +45,14 @@ dotnet test
 dotnet run --project src/Recommendarr.Web
 ```
 For local secrets, use `src/Recommendarr.Web/appsettings.Local.json`. Git ignores this file.
+
+## Releasing
+Releases come from version tags, not from every commit. Pushing a tag runs the tests, publishes the Docker image, and creates a GitHub release with generated notes:
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+`v1.2.3` publishes the image tags `1.2.3`, `1.2`, `1` and `latest`. Tags starting with `v0.` skip the major-only tag, so there's no `0` tag. Tags with a suffix, such as `v0.2.0-beta.1`, become pre-releases and don't move `latest`.
 
 ## Roadmap
 1. ✅ Scaffold, database, sqlite-vec vector store, Docker image

@@ -3,6 +3,8 @@
 
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
+# Set by the release workflow from the git tag (v1.2.3 -> 1.2.3).
+ARG VERSION=0.0.0-dev
 WORKDIR /src
 
 COPY Recommendarr.slnx ./
@@ -13,7 +15,7 @@ RUN dotnet restore src/Recommendarr.Web/Recommendarr.Web.csproj -a $TARGETARCH
 
 COPY src/ src/
 # Publishing for the target RID copies the matching sqlite-vec native (vec0.so) into the output.
-RUN dotnet publish src/Recommendarr.Web/Recommendarr.Web.csproj -a $TARGETARCH --no-restore -c Release -o /app
+RUN dotnet publish src/Recommendarr.Web/Recommendarr.Web.csproj -a $TARGETARCH --no-restore -c Release -o /app -p:Version=$VERSION
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app

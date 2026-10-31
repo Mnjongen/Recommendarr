@@ -15,7 +15,9 @@ dotnet test --filter "FullyQualifiedName~VectorMathTests.Cosine_of_identical_vec
 dotnet run --project src/Recommendarr.Web                               # health: GET /api/v1/health
 dotnet ef migrations add <Name> -p src/Recommendarr.Infrastructure -s src/Recommendarr.Web -o Data/Migrations
 docker build -t recommendarr .
+git tag v0.1.0 && git push origin v0.1.0   # release: tests, multi-arch image to GHCR, GitHub release
 ```
+CI (`.github/workflows/ci.yml`) runs on every push and PR. `release.yml` runs only for `v*.*.*` tags.
 Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 
 ## Architecture

@@ -1,7 +1,9 @@
 services:
   recommendarr:
-    image: recommendarr:latest
-    build: .
+    # Released images; pin a version (e.g. :0.1) instead of :latest if you prefer.
+    image: ghcr.io/mnjongen/recommendarr:latest
+    # To build from source instead, comment out the image line and uncomment this:
+    # build: .
     container_name: recommendarr
     ports:
       - "8080:8080"
