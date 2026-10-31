@@ -16,6 +16,16 @@ public enum EmbeddingProviderKind
     OpenAI,
 }
 
+/// <summary>How the built-in ONNX model turns token vectors into one sentence vector.</summary>
+public enum OnnxPooling
+{
+    /// <summary>The [CLS] token, as used by the BGE models.</summary>
+    Cls,
+
+    /// <summary>Mean over all tokens, as used by the sentence-transformers MiniLM/MPNet models.</summary>
+    Mean,
+}
+
 public sealed class StorageOptions
 {
     public const string Section = "Recommendarr:Storage";
@@ -91,8 +101,13 @@ public sealed class EmbeddingOptions
 
     public EmbeddingProviderKind Provider { get; set; } = EmbeddingProviderKind.Onnx;
 
-    /// <summary>Model name (Ollama/OpenAI) or ONNX model identifier.</summary>
+    /// <summary>
+    /// Model name for Ollama/OpenAI. For ONNX, a Hugging Face repository ("org/name") that has
+    /// onnx/model.onnx and vocab.txt; a bare name means a BAAI model.
+    /// </summary>
     public string Model { get; set; } = "bge-small-en-v1.5";
+
+    public OnnxPooling OnnxPooling { get; set; } = OnnxPooling.Cls;
 
     /// <summary>Endpoint for Ollama or an OpenAI-compatible server.</summary>
     public string? Endpoint { get; set; }

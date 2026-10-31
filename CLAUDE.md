@@ -31,7 +31,7 @@ Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 - `vec0` doesn't support UPSERT; use delete + insert. Vectors are passed as raw float32 blobs.
 - `SqliteVecInterceptor` loads the `vec0` extension on every connection EF opens. The native binaries come from the `sqlite-vec` NuGet package (`runtimes/{rid}/native`). If you open a connection yourself (as the tests do with in-memory SQLite), call `SqliteVecInterceptor.Load(conn)` directly.
 
-### Recommendation pipeline (milestones 2–4)
+### Recommendation pipeline
 1. Sync history.
 2. Resolve each play to a TMDB id and collapse TV episodes to their show.
 3. Fetch TMDB metadata and embed a text document for each item.
@@ -41,9 +41,9 @@ Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 7. Diversify with MMR.
 8. Check availability in Seerr.
 
-Steps 1–4 (except embedding) are implemented by `Sync/HistorySyncService` and `Sync/CatalogSyncService`, which `Web/Jobs/SyncJob` runs every `Sync:Interval` and records in `JobRuns`. History providers return a day of overlap, and plays are de-duplicated on `(UserId, SourceKey)`. A play is resolved to a TMDB id from its Plex guids, then TVDB/IMDb via TMDB `find`, then an exact-title TMDB search. The search catches titles deleted from Plex, which Tautulli answers with HTTP 400 "Unable to retrieve metadata". Watched items are "seeds": they are expanded when their metadata goes stale (`Tmdb:CacheDuration`) or when they have no links yet.
+`Web/Jobs/SyncJob` runs steps 1–7 every `Sync:Interval` and records each run in `JobRuns`. The steps live in `Infrastructure/Sync`: `HistorySyncService` → `CatalogSyncService` → `EmbeddingService` → `RecommendationService`. Step 8 (Seerr) is milestone 4. The pure engine is in `Core/Recommendations`: `EmbeddingDocument`, `TasteProfile` (play weighting and spherical k-means) and `RecommendationEngine` (scoring and MMR). History providers return a day of overlap, and plays are de-duplicated on `(UserId, SourceKey)`. A play is resolved to a TMDB id from its Plex guids, then TVDB/IMDb via TMDB `find`, then an exact-title TMDB search. The search catches titles deleted from Plex, which Tautulli answers with HTTP 400 "Unable to retrieve metadata". Watched items are "seeds": they are expanded when their metadata goes stale (`Tmdb:CacheDuration`) or when they have no links yet.
 
-Tuning knobs live in `RecommendationOptions`.
+Tuning knobs live in `RecommendationOptions`. Component scores are min-max normalised per user before weighting. Results are ranked per media type, so each user has two rank-1 items. The default embedder is `Embeddings/OnnxEmbeddingGenerator`: BAAI/bge-small-en-v1.5 with CLS pooling, downloaded into `models/` on first use. Tests use `FakeEmbeddingGenerator` (word counts) instead.
 
 ### Integrations
 - Seerr requests are made as the end user: admin API key plus the `X-Api-User` header, so Seerr's quotas and approval rules still apply.

@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Recommendarr.Infrastructure;
 using Recommendarr.Infrastructure.Data;
+using Recommendarr.Web.Api;
 using Recommendarr.Web.Components;
 using Recommendarr.Web.Jobs;
 
@@ -14,6 +16,7 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<SyncJob>();
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
 
@@ -41,6 +44,7 @@ api.MapGet("/health", async (RecommendarrDbContext db, CancellationToken ct) =>
     var vecVersion = await db.Database.SqlQueryRaw<string>("SELECT vec_version() AS Value").SingleAsync(ct);
     return Results.Ok(new { status = "ok", sqliteVec = vecVersion });
 });
+api.MapRecommendationEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -1,4 +1,6 @@
+using System.ClientModel;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -6,11 +8,14 @@ using Microsoft.Extensions.Http.Resilience;
 using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
+using Recommendarr.Infrastructure.Embeddings;
 using Recommendarr.Infrastructure.History;
 using Recommendarr.Infrastructure.Options;
 using Recommendarr.Infrastructure.Sync;
 using Recommendarr.Infrastructure.Tmdb;
 using Recommendarr.Infrastructure.Vectors;
+using OllamaSharp;
+using OpenAI;
 
 namespace Recommendarr.Infrastructure;
 
@@ -50,10 +55,44 @@ public static class DependencyInjection
             : services.AddHttpClient<IWatchHistoryProvider, TautulliHistoryProvider>();
         historyClient.AddStandardResilienceHandler(ConfigureSlowServer);
 
+        AddEmbeddingGenerator(services, config.GetSection(EmbeddingOptions.Section).Get<EmbeddingOptions>() ?? new EmbeddingOptions());
+
         services.AddScoped<HistorySyncService>();
         services.AddScoped<CatalogSyncService>();
+        services.AddScoped<EmbeddingService>();
+        services.AddScoped<RecommendationService>();
 
         return services;
+    }
+
+    private static void AddEmbeddingGenerator(IServiceCollection services, EmbeddingOptions o)
+    {
+        switch (o.Provider)
+        {
+            case EmbeddingProviderKind.Ollama:
+                services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
+                    _ => new OllamaApiClient(new Uri(o.Endpoint ?? "http://localhost:11434"), o.Model));
+                break;
+
+            case EmbeddingProviderKind.OpenAI:
+                services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(_ =>
+                {
+                    // Any OpenAI-compatible server works; local ones often accept any key.
+                    var clientOptions = new OpenAIClientOptions();
+                    if (!string.IsNullOrWhiteSpace(o.Endpoint))
+                        clientOptions.Endpoint = new Uri(o.Endpoint);
+                    return new OpenAIClient(new ApiKeyCredential(o.ApiKey ?? "unused"), clientOptions)
+                        .GetEmbeddingClient(o.Model)
+                        .AsIEmbeddingGenerator();
+                });
+                break;
+
+            default:
+                // The model download is ~130 MB; don't let the default 100s timeout cut it off.
+                services.AddHttpClient(OnnxEmbeddingGenerator.HttpClientName, c => c.Timeout = TimeSpan.FromMinutes(30));
+                services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>, OnnxEmbeddingGenerator>();
+                break;
+        }
     }
 
     /// <summary>Large history pages from a NAS-hosted Tautulli/Plex can take well over the default 10s.</summary>

@@ -52,7 +52,7 @@ public sealed class TmdbClientTests : IDisposable
         var m = await _client.GetDetailsAsync(MediaType.Movie, 603);
 
         Assert.NotNull(m);
-        Assert.Contains("append_to_response=keywords,credits,external_ids", _server.LogEntries.Single().RequestMessage.AbsoluteUrl);
+        Assert.Contains("append_to_response=keywords,credits,external_ids", _server.LogEntries.Single().RequestMessage!.AbsoluteUrl);
         Assert.Equal("The Matrix", m.Title);
         Assert.Equal(1999, m.Year);
         Assert.Equal(["Action", "Science Fiction"], m.Genres);
@@ -80,7 +80,7 @@ public sealed class TmdbClientTests : IDisposable
         var m = await _client.GetDetailsAsync(MediaType.Tv, 1396);
 
         Assert.NotNull(m);
-        Assert.Contains("append_to_response=keywords,aggregate_credits,external_ids", _server.LogEntries.Single().RequestMessage.AbsoluteUrl);
+        Assert.Contains("append_to_response=keywords,aggregate_credits,external_ids", _server.LogEntries.Single().RequestMessage!.AbsoluteUrl);
         Assert.Equal("Breaking Bad", m.Title);
         Assert.Equal(2008, m.Year);
         Assert.Null(m.Overview);

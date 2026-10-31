@@ -62,3 +62,32 @@ internal sealed class FakeMetadataSource : IMetadataSource
 
     public static MediaReference Ref(MediaType type, int tmdbId, string title) => new(tmdbId, type, title, 7, 100, 5);
 }
+
+/// <summary>Embeds text as counts of a few marker words, so tests can reason about similarity.</summary>
+internal sealed class FakeEmbeddingGenerator(params string[] vocabulary) : Microsoft.Extensions.AI.IEmbeddingGenerator<string, Microsoft.Extensions.AI.Embedding<float>>
+{
+    public int Calls { get; private set; }
+
+    public Task<Microsoft.Extensions.AI.GeneratedEmbeddings<Microsoft.Extensions.AI.Embedding<float>>> GenerateAsync(
+        IEnumerable<string> values, Microsoft.Extensions.AI.EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        Calls++;
+        var result = new Microsoft.Extensions.AI.GeneratedEmbeddings<Microsoft.Extensions.AI.Embedding<float>>();
+        foreach (var text in values)
+        {
+            // A small constant component keeps texts without marker words from being zero vectors.
+            var vector = vocabulary.Select(w => (float)CountOf(text, w)).Append(0.01f).ToArray();
+            result.Add(new Microsoft.Extensions.AI.Embedding<float>(vector));
+        }
+        return Task.FromResult(result);
+    }
+
+    private static int CountOf(string text, string word) =>
+        (text.Length - text.Replace(word, "", StringComparison.OrdinalIgnoreCase).Length) / word.Length;
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
+}

@@ -7,7 +7,7 @@ Recommendarr is a self-hosted "what to watch next" recommender for Plex. It work
 3. It checks whether each title is already on Plex.
 4. For titles that aren't, it lets the user request them through **Seerr** (formerly Overseerr), which hands them to Radarr or Sonarr.
 
-> Status: early development. Milestones 1–2 are done: the scaffold, database, vector store and container, plus history and TMDB sync. See the roadmap below.
+> Status: early development. Milestones 1–3 are done: history and TMDB sync, local embeddings, and per-user recommendations (for now through the API, at `GET /api/v1/users/{plexUserId}/recommendations`). See the roadmap below.
 
 ## Features (planned)
 - Per-user recommendations for movies and TV shows. Users sign in with their Plex account.
@@ -34,7 +34,9 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Tmdb__ApiKey` | TMDB API Read Access Token |
 | `Sync__Interval` | How often history and TMDB metadata are synced (default `06:00:00`) |
 | `Seerr__BaseUrl`, `Seerr__ApiKey` | Seerr connection |
-| `Embeddings__Provider` | `Onnx` (default), `Ollama`, `OpenAI` |
+| `Embeddings__Provider` | `Onnx` (default, runs locally; downloads ~130 MB on first run), `Ollama`, `OpenAI` |
+| `Embeddings__Model`, `Embeddings__Endpoint` | Embedding model, plus the endpoint for Ollama or an OpenAI-compatible server. Changing the model re-embeds everything. |
+| `Recommendation__*` | Engine tuning (weights, recency half-life, diversity); see `RecommendationOptions` |
 | `Llm__Enabled` | Turns on optional LLM re-ranking |
 
 ## Development
@@ -57,7 +59,7 @@ git push origin v0.1.0
 ## Roadmap
 1. ✅ Scaffold, database, sqlite-vec vector store, Docker image
 2. ✅ Tautulli and Plex history providers, TMDB client, sync jobs
-3. Embedding providers and the recommendation engine
+3. ✅ Embedding providers and the recommendation engine
 4. Seerr availability and requests, REST API
 5. Blazor UI with Plex sign-in
 6. Telegram and Discord bots, digests

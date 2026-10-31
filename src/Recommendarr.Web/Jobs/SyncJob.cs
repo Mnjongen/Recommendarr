@@ -5,7 +5,10 @@ using Recommendarr.Infrastructure.Sync;
 
 namespace Recommendarr.Web.Jobs;
 
-/// <summary>Periodically syncs watch history, then the TMDB catalog, recording each run in JobRuns.</summary>
+/// <summary>
+/// Periodically runs the whole pipeline (history → TMDB catalog → embeddings → recommendations),
+/// recording each run in JobRuns.
+/// </summary>
 public sealed class SyncJob(
     IServiceScopeFactory scopes,
     IOptions<SyncOptions> syncOptions,
@@ -66,9 +69,12 @@ public sealed class SyncJob(
         {
             var history = await scope.ServiceProvider.GetRequiredService<HistorySyncService>().RunAsync(ct);
             var catalog = await scope.ServiceProvider.GetRequiredService<CatalogSyncService>().RunAsync(ct);
+            var embeddings = await scope.ServiceProvider.GetRequiredService<EmbeddingService>().RunAsync(ct);
+            var recommendations = await scope.ServiceProvider.GetRequiredService<RecommendationService>().RunAsync(ct);
             run.Success = true;
             run.Message = $"{history.Users} users, {history.NewPlays} new plays ({history.UnresolvedPlays} unresolved), " +
-                $"{catalog.SeedsExpanded} seeds expanded, {catalog.MetadataFetched} items fetched";
+                $"{catalog.SeedsExpanded} seeds expanded, {catalog.MetadataFetched} items fetched, " +
+                $"{embeddings.Embedded} embedded, {recommendations.Recommendations} recommendations";
             logger.LogInformation("Sync finished: {Summary}", run.Message);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)

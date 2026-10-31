@@ -86,6 +86,6 @@ public sealed class PlexHistoryProviderTests : IDisposable
         var events = await _provider.GetHistoryAsync("222", since: null);
 
         Assert.Empty(events);
-        Assert.Contains(_server.LogEntries, e => e.RequestMessage.Query!.TryGetValue("accountID", out var id) && id.Contains("222"));
+        Assert.Contains(_server.LogEntries, e => e.RequestMessage!.Query!.TryGetValue("accountID", out var id) && id.Contains("222"));
     }
 }

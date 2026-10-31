@@ -79,7 +79,7 @@ public sealed class TautulliHistoryProviderTests : IDisposable
         var events = await CreateProvider().GetHistoryAsync("1234", new DateTimeOffset(2026, 10, 30, 1, 0, 0, TimeSpan.Zero));
 
         Assert.Empty(events);
-        Assert.Single(_server.LogEntries, e => e.RequestMessage.Query!.ContainsKey("after"));
+        Assert.Single(_server.LogEntries, e => e.RequestMessage!.Query!.ContainsKey("after"));
     }
 
     [Fact]

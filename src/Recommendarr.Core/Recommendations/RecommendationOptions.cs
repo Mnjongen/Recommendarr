@@ -15,11 +15,20 @@ public sealed class RecommendationOptions
     /// <summary>Plays lose half their weight after this many days.</summary>
     public double RecencyHalfLifeDays { get; set; } = 90;
 
-    /// <summary>Extra weight per additional play of the same title.</summary>
+    /// <summary>Recency never drops a play's weight below this, so old favourites still count.</summary>
+    public double MinRecencyWeight { get; set; } = 0.1;
+
+    /// <summary>Extra weight per doubling of plays of the same title (rewatches, or episodes of a show).</summary>
     public double RewatchBonus { get; set; } = 0.25;
 
-    /// <summary>Number of taste centroids (k-means clusters) per user.</summary>
+    /// <summary>Maximum number of taste centroids (k-means clusters) per user; fewer for short histories.</summary>
     public int TasteClusters { get; set; } = 4;
+
+    /// <summary>Clusters holding less than this share of the user's taste weight are ignored (the largest is always kept).</summary>
+    public double MinClusterShare { get; set; } = 0.05;
+
+    /// <summary>Strength of a TMDB "similar" link relative to a "recommendations" link (1.0).</summary>
+    public double SimilarLinkWeight { get; set; } = 0.5;
 
     /// <summary>MMR trade-off between relevance (1.0) and diversity (0.0).</summary>
     public double DiversityLambda { get; set; } = 0.7;
