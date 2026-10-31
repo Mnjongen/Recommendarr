@@ -101,6 +101,47 @@ public sealed class SeerrServiceTests : IAsyncLifetime
         Assert.Equal((false, "Movie Quota exceeded."), (recorded.Success, recorded.Error));
     }
 
+    [Fact]
+    public async Task Managed_users_can_request_through_a_seerr_account_picked_by_an_admin()
+    {
+        // alice has her own Seerr account; bob is a managed Plex Home user and borrows "Christa".
+        _seerr.Users.AddRange([new SeerrUser(7, "alice", "111", null), new SeerrUser(3, "Christa", null, null)]);
+
+        await using (var db = _database.CreateContext())
+        {
+            var service = CreateService(db);
+            Assert.Equal(SeerrLinkOutcome.SeerrUserNotFound, await service.SetSeerrUserAsync("222", 99));
+            Assert.Equal(SeerrLinkOutcome.UserNotFound, await service.SetSeerrUserAsync("999", 3));
+            Assert.Equal(SeerrLinkOutcome.Updated, await service.SetSeerrUserAsync("222", 3));
+
+            // Automatic linking finds no Plex match for bob but must keep the admin's choice.
+            Assert.Equal(2, (await service.RefreshAvailabilityAsync()).LinkedUsers);
+            Assert.Equal(RequestOutcomeKind.Created, (await service.RequestAsync("222", MediaType.Movie, 603, "api")).Kind);
+        }
+        Assert.Equal([(MediaType.Movie, 603, 3)], _seerr.Requests);
+
+        // Clearing the choice goes back to automatic linking, which has nothing for bob.
+        await using (var db = _database.CreateContext())
+        {
+            Assert.Equal(SeerrLinkOutcome.Updated, await CreateService(db).SetSeerrUserAsync("222", null));
+            var bob = await db.Users.AsNoTracking().SingleAsync(u => u.PlexUserId == "222");
+            Assert.Equal((null, false), (bob.SeerrUserId, bob.SeerrUserSetManually));
+        }
+    }
+
+    [Fact]
+    public async Task A_manual_choice_overrides_the_automatic_plex_match()
+    {
+        _seerr.Users.AddRange([new SeerrUser(7, "alice", "111", null), new SeerrUser(3, "Christa", null, null)]);
+
+        await using var db = _database.CreateContext();
+        var service = CreateService(db);
+        await service.SetSeerrUserAsync("111", 3);
+        await service.RefreshAvailabilityAsync();
+
+        Assert.Equal(3, (await db.Users.AsNoTracking().SingleAsync(u => u.PlexUserId == "111")).SeerrUserId);
+    }
+
     private sealed class FakeSeerrClient : ISeerrClient
     {
         public List<SeerrUser> Users { get; } = [];

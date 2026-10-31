@@ -47,10 +47,12 @@ The OpenAPI document is served at `/openapi/v1.json`.
 | `GET /api/v1/users` | Users found in Tautulli or Plex, with their `plexUserId` |
 | `GET /api/v1/users/{plexUserId}/recommendations?type=Movie\|Tv` | Ranked recommendations, each with a reason and its Seerr availability |
 | `POST /api/v1/users/{plexUserId}/requests` | Request a title in Seerr as that user. Body: `{ "mediaType": "Movie", "tmdbId": 603 }` |
+| `GET /api/v1/seerr/users` | Seerr accounts that a user can be linked to |
+| `PUT /api/v1/users/{plexUserId}/seerr-user` | Choose which Seerr account a user requests as. Body: `{ "seerrUserId": 3 }`; `null` goes back to automatic linking |
 
 > These endpoints have no authentication until Plex sign-in arrives in milestone 5. Don't expose Recommendarr to the internet before then.
 
-Users are matched to Seerr accounts by their Plex account. Each user must exist in Seerr (Users → Import Plex Users) before they can request anything.
+Users are linked to Seerr accounts automatically through their Plex account. Managed Plex Home users have no Seerr account of their own, so an admin picks one for them instead, such as the owner's or a local Seerr user. Requests then use that account's quotas and approval rules. Automatic linking never overrides a manual choice.
 
 ## Development
 ```sh

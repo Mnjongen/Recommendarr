@@ -261,6 +261,9 @@ namespace Recommendarr.Infrastructure.Data.Migrations
                     b.Property<int?>("SeerrUserId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("SeerrUserSetManually")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long?>("TelegramChatId")
                         .HasColumnType("INTEGER");
 

@@ -20,11 +20,20 @@ public enum RequestOutcomeKind
     NotConfigured,
 }
 
+public enum SeerrLinkOutcome
+{
+    Updated,
+    UserNotFound,
+    SeerrUserNotFound,
+    NotConfigured,
+}
+
 public sealed record RequestOutcome(RequestOutcomeKind Kind, string? Error = null, int? SeerrRequestId = null, AvailabilityStatus? Availability = null);
 
 /// <summary>
-/// Pipeline step 8 and user requests: links Recommendarr users to Seerr accounts (by plex.tv id),
-/// keeps the availability of recommended titles current, and files requests as the user.
+/// Pipeline step 8 and user requests: links Recommendarr users to Seerr accounts (automatically by
+/// plex.tv id, or as chosen by an admin), keeps the availability of recommended titles current, and
+/// files requests as the linked Seerr account.
 /// </summary>
 public sealed class SeerrService(
     RecommendarrDbContext db,
@@ -74,7 +83,8 @@ public sealed class SeerrService(
             if (user.SeerrUserId is null)
             {
                 return new RequestOutcome(RequestOutcomeKind.UserNotInSeerr,
-                    $"{user.Username} has no Seerr account yet. Import them in Seerr under Users → Import Plex Users.");
+                    $"{user.Username} is not linked to a Seerr account. An admin can pick one for them " +
+                    "(managed Plex Home users have no Seerr account of their own), or import them in Seerr under Users → Import Plex Users.");
             }
         }
 
@@ -104,7 +114,44 @@ public sealed class SeerrService(
         return new RequestOutcome(RequestOutcomeKind.Created, null, result.RequestId, status);
     }
 
-    /// <summary>Stores each user's Seerr id, matched on the plex.tv account id.</summary>
+    /// <summary>The Seerr accounts an admin can pick from.</summary>
+    public async Task<IReadOnlyList<SeerrUser>> GetSeerrUsersAsync(CancellationToken ct = default) =>
+        IsConfigured ? await seerr.GetUsersAsync(ct) : [];
+
+    /// <summary>
+    /// Pins a user to a Seerr account (for managed Plex Home users and others without their own),
+    /// or with null, goes back to automatic linking by plex.tv id.
+    /// </summary>
+    public async Task<SeerrLinkOutcome> SetSeerrUserAsync(string plexUserId, int? seerrUserId, CancellationToken ct = default)
+    {
+        if (!IsConfigured)
+            return SeerrLinkOutcome.NotConfigured;
+        var user = await db.Users.SingleOrDefaultAsync(u => u.PlexUserId == plexUserId, ct);
+        if (user is null)
+            return SeerrLinkOutcome.UserNotFound;
+
+        if (seerrUserId is null)
+        {
+            user.SeerrUserSetManually = false;
+            user.SeerrUserId = null;
+            await db.SaveChangesAsync(ct);
+            await LinkUsersAsync(ct);
+            return SeerrLinkOutcome.Updated;
+        }
+
+        if ((await seerr.GetUsersAsync(ct)).All(u => u.Id != seerrUserId))
+            return SeerrLinkOutcome.SeerrUserNotFound;
+        user.SeerrUserId = seerrUserId;
+        user.SeerrUserSetManually = true;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("{User} now requests as Seerr user {SeerrUserId}", user.Username, seerrUserId);
+        return SeerrLinkOutcome.Updated;
+    }
+
+    /// <summary>
+    /// Stores each user's Seerr id, matched on the plex.tv account id. Users an admin linked by
+    /// hand are left alone. Returns the number of users with a Seerr account.
+    /// </summary>
     private async Task<int> LinkUsersAsync(CancellationToken ct)
     {
         var byPlexId = (await seerr.GetUsersAsync(ct))
@@ -115,9 +162,9 @@ public sealed class SeerrService(
         var linked = 0;
         foreach (var user in await db.Users.ToListAsync(ct))
         {
-            int? seerrId = byPlexId.TryGetValue(user.PlexUserId, out var id) ? id : null;
-            user.SeerrUserId = seerrId;
-            if (seerrId is not null)
+            if (!user.SeerrUserSetManually)
+                user.SeerrUserId = byPlexId.TryGetValue(user.PlexUserId, out var id) ? id : null;
+            if (user.SeerrUserId is not null)
                 linked++;
         }
         await db.SaveChangesAsync(ct);

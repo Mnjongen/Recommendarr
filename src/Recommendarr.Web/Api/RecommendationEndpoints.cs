@@ -16,7 +16,7 @@ public static class RecommendationEndpoints
         api.MapGet("/users", async (RecommendarrDbContext db, CancellationToken ct) =>
             await db.Users.AsNoTracking()
                 .OrderBy(u => u.Username)
-                .Select(u => new { u.PlexUserId, u.Username, u.LastHistorySync })
+                .Select(u => new { u.PlexUserId, u.Username, u.LastHistorySync, u.SeerrUserId, u.SeerrUserSetManually })
                 .ToListAsync(ct));
 
         api.MapGet("/users/{plexUserId}/recommendations", async (string plexUserId, MediaType? type, RecommendarrDbContext db, CancellationToken ct) =>
@@ -50,6 +50,19 @@ public static class RecommendationEndpoints
             return Results.Ok(recommendations);
         });
 
+        api.MapGet("/seerr/users", async (SeerrService seerr, CancellationToken ct) =>
+            await seerr.GetSeerrUsersAsync(ct));
+
+        // Pick the Seerr account a user requests as; { "seerrUserId": null } restores automatic linking.
+        api.MapPut("/users/{plexUserId}/seerr-user", async (string plexUserId, SeerrLinkBody body, SeerrService seerr, CancellationToken ct) =>
+            await seerr.SetSeerrUserAsync(plexUserId, body.SeerrUserId, ct) switch
+            {
+                SeerrLinkOutcome.Updated => Results.NoContent(),
+                SeerrLinkOutcome.UserNotFound => Results.Problem("Unknown user.", statusCode: StatusCodes.Status404NotFound),
+                SeerrLinkOutcome.SeerrUserNotFound => Results.Problem("Seerr has no user with that id.", statusCode: StatusCodes.Status400BadRequest),
+                _ => Results.Problem("Seerr is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable),
+            });
+
         api.MapPost("/users/{plexUserId}/requests", async (string plexUserId, RequestBody body, SeerrService seerr, CancellationToken ct) =>
         {
             var outcome = await seerr.RequestAsync(plexUserId, body.MediaType, body.TmdbId, "api", ct);
@@ -67,3 +80,5 @@ public static class RecommendationEndpoints
 }
 
 public sealed record RequestBody(MediaType MediaType, int TmdbId);
+
+public sealed record SeerrLinkBody(int? SeerrUserId);

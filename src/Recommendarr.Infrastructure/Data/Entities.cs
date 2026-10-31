@@ -16,7 +16,14 @@ public sealed class UserEntity
 
     public bool IsAdmin { get; set; }
 
+    /// <summary>The Seerr account requests are made as. Linked automatically by plex.tv id unless <see cref="SeerrUserSetManually"/>.</summary>
     public int? SeerrUserId { get; set; }
+
+    /// <summary>
+    /// True when an admin picked the Seerr account (e.g. a Plex Home managed user, which has no
+    /// Seerr account of its own). Automatic linking never overwrites a manual choice.
+    /// </summary>
+    public bool SeerrUserSetManually { get; set; }
 
     public long? TelegramChatId { get; set; }
 
