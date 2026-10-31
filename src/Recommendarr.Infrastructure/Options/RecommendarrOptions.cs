@@ -54,6 +54,16 @@ public sealed class PlexOptions
     public string? Token { get; set; }
 }
 
+public sealed class SyncOptions
+{
+    public const string Section = "Recommendarr:Sync";
+
+    /// <summary>How often history and the TMDB catalog are synced.</summary>
+    public TimeSpan Interval { get; set; } = TimeSpan.FromHours(6);
+
+    public bool RunOnStartup { get; set; } = true;
+}
+
 public sealed class TmdbOptions
 {
     public const string Section = "Recommendarr:Tmdb";

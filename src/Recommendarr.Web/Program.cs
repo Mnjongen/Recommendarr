@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Recommendarr.Infrastructure;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Web.Components;
+using Recommendarr.Web.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
+builder.Services.AddHostedService<SyncJob>();
 
 var app = builder.Build();
 

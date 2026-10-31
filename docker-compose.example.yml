@@ -14,6 +14,8 @@ services:
       Recommendarr__Tautulli__ApiKey: changeme
       Recommendarr__Plex__BaseUrl: http://plex:32400
       Recommendarr__Plex__Token: changeme
+      # How often to sync history and TMDB metadata (hh:mm:ss)
+      # Recommendarr__Sync__Interval: "06:00:00"
       # TMDB API Read Access Token (v4)
       Recommendarr__Tmdb__ApiKey: changeme
       Recommendarr__Seerr__BaseUrl: http://seerr:5055

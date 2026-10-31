@@ -7,7 +7,7 @@ Recommendarr is a self-hosted "what to watch next" recommender for Plex. It work
 3. It checks whether each title is already on Plex.
 4. For titles that aren't, it lets the user request them through **Seerr** (formerly Overseerr), which hands them to Radarr or Sonarr.
 
-> Status: early development. Milestone 1 (solution scaffold, database, vector store, container) is done. See the roadmap below.
+> Status: early development. Milestones 1–2 are done: the scaffold, database, vector store and container, plus history and TMDB sync. See the roadmap below.
 
 ## Features (planned)
 - Per-user recommendations for movies and TV shows. Users sign in with their Plex account.
@@ -32,6 +32,7 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Tautulli__BaseUrl`, `Tautulli__ApiKey` | Tautulli connection |
 | `Plex__BaseUrl`, `Plex__Token` | Plex connection (server owner's token) |
 | `Tmdb__ApiKey` | TMDB API Read Access Token |
+| `Sync__Interval` | How often history and TMDB metadata are synced (default `06:00:00`) |
 | `Seerr__BaseUrl`, `Seerr__ApiKey` | Seerr connection |
 | `Embeddings__Provider` | `Onnx` (default), `Ollama`, `OpenAI` |
 | `Llm__Enabled` | Turns on optional LLM re-ranking |
@@ -47,7 +48,7 @@ For local secrets, use `src/Recommendarr.Web/appsettings.Local.json`. Git ignore
 
 ## Roadmap
 1. ✅ Scaffold, database, sqlite-vec vector store, Docker image
-2. Tautulli and Plex history providers, TMDB client, sync jobs
+2. ✅ Tautulli and Plex history providers, TMDB client, sync jobs
 3. Embedding providers and the recommendation engine
 4. Seerr availability and requests, REST API
 5. Blazor UI with Plex sign-in

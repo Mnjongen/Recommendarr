@@ -29,7 +29,7 @@ Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 - `vec0` doesn't support UPSERT; use delete + insert. Vectors are passed as raw float32 blobs.
 - `SqliteVecInterceptor` loads the `vec0` extension on every connection EF opens. The native binaries come from the `sqlite-vec` NuGet package (`runtimes/{rid}/native`). If you open a connection yourself (as the tests do with in-memory SQLite), call `SqliteVecInterceptor.Load(conn)` directly.
 
-### Recommendation pipeline (planned, milestones 2–4)
+### Recommendation pipeline (milestones 2–4)
 1. Sync history.
 2. Resolve each play to a TMDB id and collapse TV episodes to their show.
 3. Fetch TMDB metadata and embed a text document for each item.
@@ -39,11 +39,15 @@ Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 7. Diversify with MMR.
 8. Check availability in Seerr.
 
+Steps 1–4 (except embedding) are implemented by `Sync/HistorySyncService` and `Sync/CatalogSyncService`, which `Web/Jobs/SyncJob` runs every `Sync:Interval` and records in `JobRuns`. History providers return a day of overlap, and plays are de-duplicated on `(UserId, SourceKey)`. Watched items are "seeds": they are expanded when their metadata goes stale (`Tmdb:CacheDuration`) or when they have no links yet.
+
 Tuning knobs live in `RecommendationOptions`.
 
 ### Integrations
 - Seerr requests are made as the end user: admin API key plus the `X-Api-User` header, so Seerr's quotas and approval rules still apply.
 - Users sign in with Plex OAuth (PIN flow). The Plex server owner is the admin.
+- `PlexUserId` is the plex.tv account id everywhere (Tautulli's `user_id` uses the same id). The one exception is the Plex server's history API, where the owner is account `1`; `PlexHistoryProvider` maps this.
+- Tests stub HTTP with WireMock.Net. WireMock splits comma-separated query values, so assert those against `RequestMessage.AbsoluteUrl`.
 
 ## Configuration
 - Every setting lives under the `Recommendarr` section; in env vars that becomes `Recommendarr__Section__Key`. The option classes are in `Infrastructure/Options/RecommendarrOptions.cs`.

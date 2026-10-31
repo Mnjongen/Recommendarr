@@ -8,8 +8,13 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
     <PackageReference Include="sqlite-vec" Version="0.1.7-alpha.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Recommendarr.Infrastructure.Tests" />
   </ItemGroup>
 
   <PropertyGroup>
