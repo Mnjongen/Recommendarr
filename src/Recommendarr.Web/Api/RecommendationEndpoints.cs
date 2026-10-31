@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Recommendarr.Core.Models;
 using Recommendarr.Infrastructure.Data;
+using Recommendarr.Infrastructure.Seerr;
 
 namespace Recommendarr.Web.Api;
 
@@ -41,11 +42,28 @@ public static class RecommendationEndpoints
                     r.Item.Genres,
                     r.Score,
                     r.Reason,
+                    r.Availability,
                     PosterUrl = r.Item.PosterPath == null ? null : PosterBaseUrl + r.Item.PosterPath,
                     r.GeneratedAt,
                 })
                 .ToListAsync(ct);
             return Results.Ok(recommendations);
         });
+
+        api.MapPost("/users/{plexUserId}/requests", async (string plexUserId, RequestBody body, SeerrService seerr, CancellationToken ct) =>
+        {
+            var outcome = await seerr.RequestAsync(plexUserId, body.MediaType, body.TmdbId, "api", ct);
+            return outcome.Kind switch
+            {
+                RequestOutcomeKind.Created => Results.Created((string?)null, new { outcome.SeerrRequestId, outcome.Availability }),
+                RequestOutcomeKind.UserNotFound => Results.Problem("Unknown user.", statusCode: StatusCodes.Status404NotFound),
+                RequestOutcomeKind.ItemNotFound => Results.Problem("Unknown title; only titles in Recommendarr's catalog can be requested.", statusCode: StatusCodes.Status404NotFound),
+                RequestOutcomeKind.NotConfigured => Results.Problem(outcome.Error, statusCode: StatusCodes.Status503ServiceUnavailable),
+                // Seerr said no (quota, already requested, permissions) or the user isn't in Seerr.
+                _ => Results.Problem(outcome.Error, statusCode: StatusCodes.Status409Conflict),
+            };
+        });
     }
 }
+
+public sealed record RequestBody(MediaType MediaType, int TmdbId);

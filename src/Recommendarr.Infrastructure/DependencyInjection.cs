@@ -11,6 +11,7 @@ using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Embeddings;
 using Recommendarr.Infrastructure.History;
 using Recommendarr.Infrastructure.Options;
+using Recommendarr.Infrastructure.Seerr;
 using Recommendarr.Infrastructure.Sync;
 using Recommendarr.Infrastructure.Tmdb;
 using Recommendarr.Infrastructure.Vectors;
@@ -61,6 +62,11 @@ public static class DependencyInjection
         services.AddScoped<CatalogSyncService>();
         services.AddScoped<EmbeddingService>();
         services.AddScoped<RecommendationService>();
+
+        // Never retry a POST: a retried request could be filed twice in Seerr.
+        services.AddHttpClient<ISeerrClient, SeerrClient>()
+            .AddStandardResilienceHandler(o => o.Retry.DisableForUnsafeHttpMethods());
+        services.AddScoped<SeerrService>();
 
         return services;
     }

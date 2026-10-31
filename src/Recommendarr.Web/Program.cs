@@ -16,6 +16,7 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<SyncJob>();
+builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
@@ -37,6 +38,8 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+app.MapOpenApi(); // /openapi/v1.json
 
 var api = app.MapGroup("/api/v1");
 api.MapGet("/health", async (RecommendarrDbContext db, CancellationToken ct) =>

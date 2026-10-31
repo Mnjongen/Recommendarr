@@ -39,6 +39,19 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Recommendation__*` | Engine tuning (weights, recency half-life, diversity); see `RecommendationOptions` |
 | `Llm__Enabled` | Turns on optional LLM re-ranking |
 
+## REST API
+The OpenAPI document is served at `/openapi/v1.json`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/users` | Users found in Tautulli or Plex, with their `plexUserId` |
+| `GET /api/v1/users/{plexUserId}/recommendations?type=Movie\|Tv` | Ranked recommendations, each with a reason and its Seerr availability |
+| `POST /api/v1/users/{plexUserId}/requests` | Request a title in Seerr as that user. Body: `{ "mediaType": "Movie", "tmdbId": 603 }` |
+
+> These endpoints have no authentication until Plex sign-in arrives in milestone 5. Don't expose Recommendarr to the internet before then.
+
+Users are matched to Seerr accounts by their Plex account. Each user must exist in Seerr (Users → Import Plex Users) before they can request anything.
+
 ## Development
 ```sh
 dotnet tool restore

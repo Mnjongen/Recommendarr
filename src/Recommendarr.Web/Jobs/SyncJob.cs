@@ -1,12 +1,14 @@
 using Microsoft.Extensions.Options;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Options;
+using Recommendarr.Infrastructure.Seerr;
 using Recommendarr.Infrastructure.Sync;
 
 namespace Recommendarr.Web.Jobs;
 
 /// <summary>
-/// Periodically runs the whole pipeline (history → TMDB catalog → embeddings → recommendations),
+/// Periodically runs the whole pipeline (history → TMDB catalog → embeddings → recommendations →
+/// Seerr availability; the last step is skipped when Seerr isn't configured),
 /// recording each run in JobRuns.
 /// </summary>
 public sealed class SyncJob(
@@ -71,10 +73,12 @@ public sealed class SyncJob(
             var catalog = await scope.ServiceProvider.GetRequiredService<CatalogSyncService>().RunAsync(ct);
             var embeddings = await scope.ServiceProvider.GetRequiredService<EmbeddingService>().RunAsync(ct);
             var recommendations = await scope.ServiceProvider.GetRequiredService<RecommendationService>().RunAsync(ct);
+            var availability = await scope.ServiceProvider.GetRequiredService<SeerrService>().RefreshAvailabilityAsync(ct);
             run.Success = true;
             run.Message = $"{history.Users} users, {history.NewPlays} new plays ({history.UnresolvedPlays} unresolved), " +
                 $"{catalog.SeedsExpanded} seeds expanded, {catalog.MetadataFetched} items fetched, " +
-                $"{embeddings.Embedded} embedded, {recommendations.Recommendations} recommendations";
+                $"{embeddings.Embedded} embedded, {recommendations.Recommendations} recommendations, " +
+                (availability.Skipped ? "Seerr not configured" : $"{availability.LinkedUsers} users linked to Seerr, {availability.ItemsChecked} titles checked");
             logger.LogInformation("Sync finished: {Summary}", run.Message);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
