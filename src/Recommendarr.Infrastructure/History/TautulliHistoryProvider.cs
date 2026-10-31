@@ -96,7 +96,9 @@ public sealed class TautulliHistoryProvider(HttpClient http, IOptions<TautulliOp
             ids.TmdbId,
             ids.TvdbId,
             ids.ImdbId,
-            row.GetStringOrNull("row_id") ?? row.GetStringOrNull("id"));
+            row.GetStringOrNull("row_id") ?? row.GetStringOrNull("id"),
+            // For episodes "year" is the episode's year, which would mislead a title search.
+            type == MediaType.Movie ? (int?)row.GetInt64OrNull("year") : null);
     }
 
     private async Task<ExternalIds> GetIdsAsync(string ratingKey, CancellationToken ct)
@@ -104,11 +106,19 @@ public sealed class TautulliHistoryProvider(HttpClient http, IOptions<TautulliOp
         if (_idCache.TryGetValue(ratingKey, out var cached))
             return cached;
 
-        // Items deleted from Plex come back with empty metadata, which parses to no ids.
-        var data = await CallAsync("get_metadata", new Dictionary<string, string> { ["rating_key"] = ratingKey }, ct);
-        var guids = data.GetArrayOrEmpty("guids").Select(g => g.ValueKind == JsonValueKind.String ? g.GetString() : null)
-            .Append(data.GetStringOrNull("guid"));
-        var ids = ExternalIds.Parse(guids);
+        ExternalIds ids;
+        try
+        {
+            var data = await CallAsync("get_metadata", new Dictionary<string, string> { ["rating_key"] = ratingKey }, ct);
+            var guids = data.GetArrayOrEmpty("guids").Select(g => g.ValueKind == JsonValueKind.String ? g.GetString() : null)
+                .Append(data.GetStringOrNull("guid"));
+            ids = ExternalIds.Parse(guids);
+        }
+        catch (TautulliApiException)
+        {
+            // "Unable to retrieve metadata": the item was deleted from Plex or re-added under a new key.
+            ids = default;
+        }
         _idCache[ratingKey] = ids;
         return ids;
     }
@@ -125,16 +135,29 @@ public sealed class TautulliHistoryProvider(HttpClient http, IOptions<TautulliOp
             .Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}"));
         var url = new Uri(new Uri(_options.BaseUrl.TrimEnd('/') + "/"), $"api/v2?{query}");
 
+        // Tautulli reports command errors as HTTP 400 with the usual JSON envelope, so read the
+        // envelope first and only fall back to the status code when there isn't one.
         using var response = await http.GetAsync(url, ct);
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+        JsonElement body;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            body = doc.RootElement.GetProperty("response").Clone();
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            response.EnsureSuccessStatusCode();
+            throw new InvalidOperationException($"Tautulli {cmd} returned an unexpected response.", ex);
+        }
 
-        var body = doc.RootElement.GetProperty("response");
         if (body.GetStringOrNull("result") != "success")
-            throw new InvalidOperationException($"Tautulli {cmd} failed: {body.GetStringOrNull("message")}");
-        return body.Prop("data")?.Clone() ?? default;
+            throw new TautulliApiException($"Tautulli {cmd} failed: {body.GetStringOrNull("message")}");
+        return body.Prop("data") ?? default;
     }
 
     private static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 }
+
+/// <summary>Tautulli answered with <c>"result": "error"</c>.</summary>
+public sealed class TautulliApiException(string message) : InvalidOperationException(message);

@@ -83,12 +83,30 @@ public sealed class TautulliHistoryProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task GetHistory_keeps_plays_whose_metadata_is_gone_from_plex()
+    {
+        Respond("get_history", """
+            { "data": [{ "row_id": 1, "media_type": "episode", "rating_key": 2448, "grandparent_rating_key": 2136, "grandparent_title": "My Hero Academia", "date": 1741040194 }] }
+            """);
+        // Real Tautulli behaviour: HTTP 400 with the normal error envelope.
+        _server.Given(Request.Create().WithPath("/tautulli/api/v2").UsingGet().WithParam("cmd", "get_metadata"))
+            .RespondWith(Response.Create().WithStatusCode(400).WithHeader("Content-Type", "application/json").WithBody(
+                """{ "response": { "result": "error", "message": "Unable to retrieve metadata for rating_key '2136'", "data": {} } }"""));
+
+        var e = Assert.Single(await CreateProvider().GetHistoryAsync("1234", since: null));
+
+        Assert.Equal("My Hero Academia", e.Title);
+        Assert.Null(e.TmdbId);
+        Assert.Null(e.TvdbId);
+    }
+
+    [Fact]
     public async Task Failed_command_throws()
     {
         _server.Given(Request.Create().WithPath("/tautulli/api/v2").UsingGet())
             .RespondWith(Response.Create().WithBody("""{ "response": { "result": "error", "message": "Invalid apikey", "data": {} } }"""));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateProvider().GetUsersAsync());
+        var ex = await Assert.ThrowsAsync<TautulliApiException>(() => CreateProvider().GetUsersAsync());
         Assert.Contains("Invalid apikey", ex.Message);
     }
 }

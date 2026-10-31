@@ -47,17 +47,19 @@ public sealed class SyncServiceTests : IAsyncLifetime
             Play("1", MediaType.Tv, "Breaking Bad", "b", tvdb: 81189),
             Play("1", MediaType.Tv, "Breaking Bad", "c", tvdb: 81189),
             Play("1", MediaType.Movie, "Home Video", "d"),
+            Play("1", MediaType.Tv, "RuPaul's Drag Race", "e"),
         ]);
         _metadata.Find[(81189, null)] = 1396;
+        _metadata.Search[(MediaType.Tv, "RuPaul's Drag Race")] = 8514;
 
         var result = await SyncHistoryAsync();
 
-        Assert.Equal(new HistorySyncResult(1, 4, 1), result);
+        Assert.Equal(new HistorySyncResult(1, 5, 1), result);
         await using var db = _database.CreateContext();
         var user = await db.Users.SingleAsync();
         Assert.Equal(T0, user.LastHistorySync);
         var items = await db.Items.OrderBy(i => i.TmdbId).ToListAsync();
-        Assert.Equal([(MediaType.Movie, 603), (MediaType.Tv, 1396)], items.Select(i => (i.MediaType, i.TmdbId)));
+        Assert.Equal([(MediaType.Movie, 603), (MediaType.Tv, 1396), (MediaType.Tv, 8514)], items.Select(i => (i.MediaType, i.TmdbId)));
         Assert.All(items, i => Assert.Null(i.MetadataFetchedAt));
         var plays = await db.WatchEvents.OrderBy(w => w.SourceKey).ToListAsync();
         Assert.Equal(items[1].Id, plays[1].ItemId);

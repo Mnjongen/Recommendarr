@@ -118,7 +118,8 @@ public sealed class PlexHistoryProvider : IWatchHistoryProvider
             ids.TmdbId,
             ids.TvdbId,
             ids.ImdbId,
-            LastSegment(row.GetStringOrNull("historyKey")) ?? $"{row.GetStringOrNull("ratingKey")}:{viewedAt}");
+            LastSegment(row.GetStringOrNull("historyKey")) ?? $"{row.GetStringOrNull("ratingKey")}:{viewedAt}",
+            type == MediaType.Movie ? (int?)row.GetInt64OrNull("year") : null);
     }
 
     private async Task<ExternalIds> GetIdsAsync(string ratingKey, CancellationToken ct)

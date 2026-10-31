@@ -85,6 +85,27 @@ public sealed class TmdbClient : IMetadataSource
         return null;
     }
 
+    public async Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default)
+    {
+        var wanted = NormalizeTitle(title);
+        if (wanted.Length == 0)
+            return null;
+
+        var path = $"search/{PathFor(type)}?query={Uri.EscapeDataString(title)}";
+        if (year is { } y)
+            path += $"&{(type == MediaType.Movie ? "year" : "first_air_date_year")}={y}";
+        var results = (await GetAsync<ListDto>(path, ct))?.Results ?? [];
+
+        // TMDB ranks by relevance; take the first exact title match rather than a fuzzy guess.
+        var match = results.FirstOrDefault(r =>
+            new[] { r.Title, r.Name, r.OriginalTitle, r.OriginalName }.Any(t => t is not null && NormalizeTitle(t) == wanted));
+        return match?.Id;
+    }
+
+    /// <summary>Lowercase letters and digits only, so "Dr. STONE" matches "Dr. Stone".</summary>
+    private static string NormalizeTitle(string title) =>
+        string.Concat(title.Where(char.IsLetterOrDigit)).ToLowerInvariant();
+
     private async Task<int?> FindAsync(MediaType type, string externalId, string source, CancellationToken ct)
     {
         var result = await GetAsync<FindDto>($"find/{Uri.EscapeDataString(externalId)}?external_source={source}", ct);
@@ -174,6 +195,8 @@ public sealed class TmdbClient : IMetadataSource
         public int Id { get; init; }
         public string? Title { get; init; }
         public string? Name { get; init; }
+        public string? OriginalTitle { get; init; }
+        public string? OriginalName { get; init; }
         public double VoteAverage { get; init; }
         public int VoteCount { get; init; }
         public double Popularity { get; init; }

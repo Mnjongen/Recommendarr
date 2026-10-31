@@ -41,7 +41,7 @@ Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 7. Diversify with MMR.
 8. Check availability in Seerr.
 
-Steps 1–4 (except embedding) are implemented by `Sync/HistorySyncService` and `Sync/CatalogSyncService`, which `Web/Jobs/SyncJob` runs every `Sync:Interval` and records in `JobRuns`. History providers return a day of overlap, and plays are de-duplicated on `(UserId, SourceKey)`. Watched items are "seeds": they are expanded when their metadata goes stale (`Tmdb:CacheDuration`) or when they have no links yet.
+Steps 1–4 (except embedding) are implemented by `Sync/HistorySyncService` and `Sync/CatalogSyncService`, which `Web/Jobs/SyncJob` runs every `Sync:Interval` and records in `JobRuns`. History providers return a day of overlap, and plays are de-duplicated on `(UserId, SourceKey)`. A play is resolved to a TMDB id from its Plex guids, then TVDB/IMDb via TMDB `find`, then an exact-title TMDB search. The search catches titles deleted from Plex, which Tautulli answers with HTTP 400 "Unable to retrieve metadata". Watched items are "seeds": they are expanded when their metadata goes stale (`Tmdb:CacheDuration`) or when they have no links yet.
 
 Tuning knobs live in `RecommendationOptions`.
 

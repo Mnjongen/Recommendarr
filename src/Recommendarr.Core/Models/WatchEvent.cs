@@ -13,4 +13,5 @@ public sealed record WatchEvent(
     int? TmdbId = null,
     int? TvdbId = null,
     string? ImdbId = null,
-    string? SourceKey = null);
+    string? SourceKey = null,
+    int? Year = null);

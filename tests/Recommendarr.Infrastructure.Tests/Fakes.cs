@@ -32,6 +32,8 @@ internal sealed class FakeMetadataSource : IMetadataSource
 
     public Dictionary<(int? TvdbId, string? ImdbId), int> Find { get; } = [];
 
+    public Dictionary<(MediaType, string), int> Search { get; } = [];
+
     public List<(MediaType, int)> DetailCalls { get; } = [];
 
     public Task<MediaMetadata?> GetDetailsAsync(MediaType type, int tmdbId, CancellationToken ct = default)
@@ -51,6 +53,9 @@ internal sealed class FakeMetadataSource : IMetadataSource
 
     public Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default) =>
         Task.FromResult<int?>(Find.TryGetValue((tvdbId, imdbId), out var id) ? id : null);
+
+    public Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default) =>
+        Task.FromResult<int?>(Search.TryGetValue((type, title), out var id) ? id : null);
 
     public static MediaMetadata Metadata(MediaType type, int tmdbId, string title, params string[] genres) =>
         new(tmdbId, type, title, 2000, $"{title} overview", genres, ["keyword"], ["Actor"], ["Director"], 7.5, 1000, 10, "/p.jpg");

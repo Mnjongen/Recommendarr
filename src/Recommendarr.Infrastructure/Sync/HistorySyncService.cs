@@ -24,6 +24,7 @@ public sealed class HistorySyncService(
         var users = await UpsertUsersAsync(await history.GetUsersAsync(ct), ct);
         var catalog = new ItemCatalog(db);
         var tmdbIds = new Dictionary<(MediaType, int?, string?), int?>();
+        var searched = new Dictionary<(MediaType, string, int?), int?>();
         int newPlays = 0, unresolved = 0;
 
         foreach (var user in users)
@@ -50,6 +51,12 @@ public sealed class HistorySyncService(
                     var key = (e.MediaType, e.TvdbId, e.ImdbId);
                     if (!tmdbIds.TryGetValue(key, out tmdbId))
                         tmdbIds[key] = tmdbId = await metadata.FindTmdbIdAsync(e.MediaType, e.TvdbId, e.ImdbId, ct);
+                }
+                if (tmdbId is null)
+                {
+                    var key = (e.MediaType, e.Title, e.Year);
+                    if (!searched.TryGetValue(key, out tmdbId))
+                        searched[key] = tmdbId = await metadata.SearchTmdbIdAsync(e.MediaType, e.Title, e.Year, ct);
                 }
 
                 ItemEntity? item = null;

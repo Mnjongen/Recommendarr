@@ -113,6 +113,21 @@ public sealed class TmdbClientTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchTmdbId_accepts_only_an_exact_title_match()
+    {
+        Respond("search/movie", """
+            { "results": [
+              { "id": 1, "title": "Now You See Me 2", "original_title": "Now You See Me 2" },
+              { "id": 75656, "title": "Now You See Me", "original_title": "Now You See Me" }
+            ] }
+            """, ("query", "now you see me!"), ("year", "2013"));
+        Respond("search/tv", """{ "results": [{ "id": 2, "name": "Grace and Frankie" }] }""", ("query", "Frankie"));
+
+        Assert.Equal(75656, await _client.SearchTmdbIdAsync(MediaType.Movie, "now you see me!", 2013));
+        Assert.Null(await _client.SearchTmdbIdAsync(MediaType.Tv, "Frankie", null));
+    }
+
+    [Fact]
     public async Task FindTmdbId_falls_back_to_imdb_when_tvdb_has_no_match()
     {
         Respond("find/81189", """{ "movie_results": [], "tv_results": [] }""", ("external_source", "tvdb_id"));

@@ -15,4 +15,10 @@ public interface IMetadataSource
 
     /// <summary>Resolves a TMDB id from a TVDB or IMDb id when the history source lacks one.</summary>
     Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Last resort for plays without external ids (e.g. deleted from Plex): searches by title and
+    /// returns a match only when the title is an exact (normalized) match.
+    /// </summary>
+    Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default);
 }
