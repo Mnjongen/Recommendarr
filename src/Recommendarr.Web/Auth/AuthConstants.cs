@@ -12,7 +12,10 @@ public static class AuthConstants
     public const string PendingStage = "pending";
     public const string ProfileStage = "profile";
 
-    /// <summary>The account's plex.tv token, kept (encrypted in the cookie) only until a profile is picked.</summary>
+    /// <summary>
+    /// The account's plex.tv token, kept encrypted in the HttpOnly cookie so profiles can be switched
+    /// without a new Plex sign-in. Never sent to the browser in readable form or exposed by the API.
+    /// </summary>
     public const string PlexTokenClaim = "rr:plex_token";
 
     public const string ThumbClaim = "rr:thumb";

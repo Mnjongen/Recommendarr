@@ -63,7 +63,8 @@ public sealed class AppFactory : WebApplicationFactory<Program>
 
 /// <summary>
 /// Header <c>X-Test-Profile</c>: <c>pending</c> for a Plex sign-in without a profile, otherwise
-/// <c>{plexUserId}</c> or <c>{plexUserId},admin</c>.
+/// <c>{plexUserId}</c>, optionally followed by <c>,admin</c> and/or <c>,token</c> (the session still
+/// holds the Plex account token, as real sign-ins do).
 /// </summary>
 public sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
@@ -87,6 +88,8 @@ public sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions>
             claims = [new(AuthConstants.StageClaim, AuthConstants.ProfileStage), new(ClaimTypes.NameIdentifier, parts[0]), new(ClaimTypes.Name, parts[0])];
             if (parts.Contains("admin"))
                 claims.Add(new Claim(ClaimTypes.Role, AuthConstants.AdminRole));
+            if (parts.Contains("token"))
+                claims.Add(new Claim(AuthConstants.PlexTokenClaim, "token"));
         }
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme)), Scheme);
         return Task.FromResult(AuthenticateResult.Success(ticket));

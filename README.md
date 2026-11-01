@@ -7,7 +7,7 @@ Recommendarr is a self-hosted "what to watch next" recommender for Plex. It work
 3. It checks whether each title is already on Plex.
 4. For titles that aren't, it lets the user request them through **Seerr** (formerly Overseerr), which hands them to Radarr or Sonarr.
 
-> Status: early development. Milestones 1–4 are done: history and TMDB sync, local embeddings, per-user recommendations with Seerr availability, and requests. For now everything is used through the REST API; the web UI is next. See the roadmap below.
+> Status: early development. Milestones 1–5 are done: history and TMDB sync, local embeddings, per-user recommendations with Seerr availability and requests, and a web UI with Plex sign-in and Plex Home profiles. See the roadmap below.
 
 ## Features (planned)
 - Per-user recommendations for movies and TV shows. Users sign in with their Plex account.
@@ -79,6 +79,6 @@ git push origin v0.1.0
 2. ✅ Tautulli and Plex history providers, TMDB client, sync jobs
 3. ✅ Embedding providers and the recommendation engine
 4. ✅ Seerr availability and requests, REST API
-5. Blazor UI with Plex sign-in
+5. ✅ Blazor UI with Plex sign-in
 6. Telegram and Discord bots, digests
 7. Optional LLM re-ranker, feedback, and tuning UI

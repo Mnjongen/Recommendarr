@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Recommendarr.Infrastructure.Plex;
@@ -45,13 +46,11 @@ public static class AuthEndpoints
             // A lone, unprotected profile needs no picker.
             if (options is [{ Protected: false } only])
             {
-                await SignInProfileAsync(http, only);
+                await SignInProfileAsync(http, only, token);
                 return Results.Redirect("/");
             }
 
-            await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(AuthConstants.StageClaim, AuthConstants.PendingStage), new Claim(AuthConstants.PlexTokenClaim, token)],
-                CookieAuthenticationDefaults.AuthenticationScheme)));
+            await SignInPendingAsync(http, token);
             return Results.Redirect("/profiles");
         });
 
@@ -74,26 +73,65 @@ public static class AuthEndpoints
                 if (profile.Protected && !await plex.SwitchHomeUserAsync(token, profile.PlexUserId, pin, ct))
                     return Results.Redirect($"/profiles?error=pin&profile={Uri.EscapeDataString(profileId)}");
 
-                await SignInProfileAsync(http, profile);
+                await SignInProfileAsync(http, profile, token);
                 return Results.Redirect("/");
             })
             .RequireAuthorization(AuthConstants.PendingProfilePolicy);
 
+        // "Switch profile": back to "Who's watching?" with the same Plex account, no new Plex sign-in.
+        // Protected profiles still need their PIN. Sessions from before the token was kept go via Plex.
+        auth.MapPost("/switch", async (HttpContext http) =>
+            {
+                if (http.User.FindFirstValue(AuthConstants.PlexTokenClaim) is not { } token)
+                    return Results.Redirect("/auth/plex/start");
+                await SignInPendingAsync(http, token);
+                return Results.Redirect("/profiles");
+            })
+            .RequireAuthorization()
+            .RequireAntiforgery();
+
         auth.MapPost("/logout", async (HttpContext http) =>
-        {
-            await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Results.Redirect("/login");
-        });
+            {
+                await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Results.Redirect("/login");
+            })
+            .RequireAntiforgery();
     }
 
-    /// <summary>Replaces the session with the chosen profile. The Plex token is not carried over.</summary>
-    private static Task SignInProfileAsync(HttpContext http, ProfileOption profile)
+    /// <summary>
+    /// Rejects cross-site posts. The antiforgery middleware only records the result; minimal APIs
+    /// enforce it on their own only when they bind form fields, which these endpoints don't.
+    /// </summary>
+    private static RouteHandlerBuilder RequireAntiforgery(this RouteHandlerBuilder endpoint) =>
+        endpoint
+            .WithMetadata(new RequireAntiforgeryTokenAttribute())
+            .AddEndpointFilter(async (ctx, next) =>
+                ctx.HttpContext.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: false }
+                    // A body keeps the status-code pages from turning this into the "not found" page.
+                    ? Results.Text("This form has expired. Go back, reload the page and try again.", statusCode: StatusCodes.Status400BadRequest)
+                    : await next(ctx));
+
+    /// <summary>Signed in with Plex, profile not picked yet.</summary>
+    private static Task SignInPendingAsync(HttpContext http, string token) =>
+        http.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(AuthConstants.StageClaim, AuthConstants.PendingStage), new Claim(AuthConstants.PlexTokenClaim, token)],
+                CookieAuthenticationDefaults.AuthenticationScheme)),
+            new AuthenticationProperties { IsPersistent = true });
+
+    /// <summary>
+    /// Replaces the session with the chosen profile. The account token stays in the (encrypted,
+    /// HttpOnly) cookie so the household can switch profiles without signing in to Plex again.
+    /// </summary>
+    private static Task SignInProfileAsync(HttpContext http, ProfileOption profile, string token)
     {
         List<Claim> claims =
         [
             new(AuthConstants.StageClaim, AuthConstants.ProfileStage),
             new(ClaimTypes.NameIdentifier, profile.PlexUserId),
             new(ClaimTypes.Name, profile.Name),
+            new(AuthConstants.PlexTokenClaim, token),
         ];
         if (profile.ThumbUrl is not null)
             claims.Add(new Claim(AuthConstants.ThumbClaim, profile.ThumbUrl));

@@ -104,6 +104,7 @@ input, select {
 .profile-card.has-error { border-color: var(--danger); }
 .profile-card .name { font-weight: 600; }
 .profile-card input { width: 100%; text-align: center; letter-spacing: 0.4em; }
+.other-account { margin-top: 2rem; }
 
 /* Recommendations */
 .page-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }

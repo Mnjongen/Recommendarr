@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Recommendarr.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Recommendarr.Web.Tests" />
   </ItemGroup>
 
   <PropertyGroup>

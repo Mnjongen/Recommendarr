@@ -20,7 +20,8 @@ public sealed class AuthorizationTests : IAsyncLifetime
     {
         await using var scope = _app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>();
-        if (db.Users.Any())
+        // The database is shared by every test class in the collection; seed this class's data once.
+        if (db.Users.Any(u => u.PlexUserId == "1"))
             return;
         var alice = new UserEntity { PlexUserId = "1", Username = "alice" };
         var owner = new UserEntity { PlexUserId = "2", Username = "owner", IsAdmin = true };

@@ -16,8 +16,10 @@
                     <img class="avatar" src="@thumb" alt="" />
                 }
                 <span>@context.User.Identity?.Name</span>
-                @* Switching goes through Plex again; it's instant when the browser is still signed in to plex.tv. *@
-                <a class="link" href="/auth/plex/start">Switch profile</a>
+                <form method="post" action="/auth/switch">
+                    <AntiforgeryToken />
+                    <button type="submit" class="link">Switch profile</button>
+                </form>
                 <form method="post" action="/auth/logout">
                     <AntiforgeryToken />
                     <button type="submit" class="link">Sign out</button>
