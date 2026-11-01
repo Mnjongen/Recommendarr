@@ -22,6 +22,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- Local runtime data (database, keys, downloaded models) is not part of the project; keeping it
+         out of the item globs stops dotnet watch from reacting to every database write. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);config/**</DefaultItemExcludes>
   </PropertyGroup>
 
 </Project>
