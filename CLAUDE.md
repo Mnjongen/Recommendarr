@@ -52,6 +52,7 @@ Tuning knobs live in `RecommendationOptions`. Component scores are min-max norma
 - Interactive components must not hold a DbContext across events; create a scope per operation (`IServiceScopeFactory`).
 - `tests/Recommendarr.Web.Tests` boots the app with `WebApplicationFactory` in the `Testing` environment, which skips `appsettings.Local.json`. It authenticates through `TestAuthHandler` (`X-Test-Profile: 1`, `2,admin` or `pending`).
 - `PlexUserId` is the plex.tv account id everywhere (Tautulli's `user_id` uses the same id). The one exception is the Plex server's history API, where the owner is account `1`; `PlexHistoryProvider` maps this.
+- Every HttpClient uses `Http/Ipv4FirstConnector` as its connect callback, unless `Network:PreferIPv4=false`. It's registered through `ConfigureHttpClientDefaults`. The developer's home IPv6 route to TMDB's CDN resets about a third of TLS handshakes, and .NET can't fall back once TCP has connected. Sync failures are stored in `JobRuns.Message` with their inner causes (`SyncJob.Describe`).
 - Tests stub HTTP with WireMock.Net. WireMock splits comma-separated query values, so assert those against `RequestMessage.AbsoluteUrl`.
 
 ## Configuration

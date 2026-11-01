@@ -113,11 +113,27 @@ public sealed class SyncJob(
             db.ChangeTracker.Clear();
             db.JobRuns.Attach(run);
             run.Success = false;
-            run.Message = ex.Message;
+            run.Message = Describe(ex);
         }
 
         run.FinishedAt = time.GetUtcNow();
         await db.SaveChangesAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// "The SSL connection could not be established, see inner exception" isn't useful in the
+    /// admin UI, so include the chain of causes.
+    /// </summary>
+    internal static string Describe(Exception ex)
+    {
+        var messages = new List<string>();
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            var message = e.Message.Replace(", see inner exception", "").TrimEnd('.');
+            if (!messages.Contains(message))
+                messages.Add(message);
+        }
+        return string.Join(" → ", messages) + ".";
     }
 
     private string? MissingConfiguration()

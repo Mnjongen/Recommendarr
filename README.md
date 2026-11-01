@@ -38,6 +38,7 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Seerr__BaseUrl`, `Seerr__ApiKey` | Seerr connection |
 | `Embeddings__Provider` | `Onnx` (default, runs locally; downloads ~130 MB on first run), `Ollama`, `OpenAI` |
 | `Embeddings__Model`, `Embeddings__Endpoint` | Embedding model, plus the endpoint for Ollama or an OpenAI-compatible server. Changing the model re-embeds everything. |
+| `Network__PreferIPv4` | Connect over IPv4 before IPv6 (default `true`). This works around home networks whose IPv6 route drops TLS connections ("The SSL connection could not be established"). |
 | `Recommendation__*` | Engine tuning (weights, recency half-life, diversity); see `RecommendationOptions` |
 | `Llm__Enabled` | Turns on optional LLM re-ranking |
 

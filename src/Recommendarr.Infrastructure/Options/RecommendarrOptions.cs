@@ -38,6 +38,17 @@ public sealed class StorageOptions
     public string ModelDirectory => Path.Combine(DataDirectory, "models");
 }
 
+public sealed class NetworkOptions
+{
+    public const string Section = "Recommendarr:Network";
+
+    /// <summary>
+    /// Connect over IPv4 before IPv6 for all outgoing HTTP (TMDB, plex.tv, Seerr, ...). Works around
+    /// home networks with broken IPv6 routes; IPv6 is still used when a host has no IPv4 address.
+    /// </summary>
+    public bool PreferIPv4 { get; set; } = true;
+}
+
 public sealed class HistoryOptions
 {
     public const string Section = "Recommendarr:History";

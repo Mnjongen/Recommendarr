@@ -9,6 +9,7 @@ using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Embeddings;
+using Recommendarr.Infrastructure.Http;
 using Recommendarr.Infrastructure.History;
 using Recommendarr.Infrastructure.Options;
 using Recommendarr.Infrastructure.Plex;
@@ -46,6 +47,17 @@ public static class DependencyInjection
             .AddInterceptors(new SqliteVecInterceptor()));
 
         services.AddScoped<IVectorStore, SqliteVecStore>();
+
+        // Applies to every HttpClient below.
+        var network = config.GetSection(NetworkOptions.Section).Get<NetworkOptions>() ?? new NetworkOptions();
+        if (network.PreferIPv4)
+        {
+            services.ConfigureHttpClientDefaults(b => b.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                ConnectCallback = Ipv4FirstConnector.ConnectAsync,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5), // pick up DNS changes
+            }));
+        }
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddHttpClient<IMetadataSource, TmdbClient>().AddStandardResilienceHandler();
