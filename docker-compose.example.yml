@@ -5,6 +5,8 @@ services:
     # To build from source instead, comment out the image line and uncomment this:
     # build: .
     container_name: recommendarr
+    # Runs as uid 1654 by default; ./config must be writable by it, or pick your own ids:
+    # user: "1000:1000"
     ports:
       - "8080:8080"
     volumes:

@@ -14,9 +14,11 @@
         }
     </div>
     <div class="body">
-        <h3>@Item.Title @if (Item.Year is not null) { <span class="year">(@Item.Year)</span> }</h3>
+        @* An inline @if would swallow the space before the year, so keep it an expression. *@
+        <h3>@Item.Title <span class="year">@(Item.Year is null ? "" : $"({Item.Year})")</span></h3>
         <div class="meta">
-            @if (Item.VoteAverage > 0) { <span>★ @Item.VoteAverage.ToString("0.0")</span> }
+            @* Invariant, like TMDB, so the rating doesn't depend on the server's locale. *@
+            @if (Item.VoteAverage > 0) { <span>★ @Item.VoteAverage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)</span> }
             @foreach (var genre in Item.Genres.Take(2)) { <span>@genre</span> }
         </div>
         @if (Item.Reason is not null)

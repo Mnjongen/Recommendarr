@@ -21,7 +21,9 @@ Recommendarr is a self-hosted "what to watch next" recommender for Plex. It work
 cp docker-compose.example.yml docker-compose.yml   # fill in URLs and API keys
 docker compose up -d
 ```
-Images are published to `ghcr.io/mnjongen/recommendarr` for amd64 and arm64. The app listens on port 8080. Data (the SQLite database and downloaded models) is stored in the `/config` volume.
+Images are published to `ghcr.io/mnjongen/recommendarr` for amd64 and arm64. The app listens on port 8080.
+
+The container runs as a non-root user (uid/gid `1654`), so on a Linux host `./config` must be writable by that user: `sudo chown -R 1654:1654 ./config`. To run as your own user instead (for example PUID/PGID 1000 or Unraid's 99:100), set `user: "1000:1000"` in the compose file. Data (the SQLite database and downloaded models) is stored in the `/config` volume.
 
 ## Configuration
 All settings live under the `Recommendarr` section, so any of them can be set as an environment variable using `__` as the separator. For example, `Recommendarr__Tmdb__ApiKey`. See [appsettings.json](src/Recommendarr.Web/appsettings.json) for every key.

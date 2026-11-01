@@ -1,24 +1,22 @@
 ﻿@page "/"
 @attribute [Authorize]
 @rendermode InteractiveServer
-@using Microsoft.EntityFrameworkCore
-@using Recommendarr.Infrastructure.Data
 @using Recommendarr.Infrastructure.Seerr
-@inject IServiceScopeFactory Scopes
+@inject IRecommendationsPageService Page
 
 <PageTitle>Recommendations · Recommendarr</PageTitle>
 
 <div class="page-header">
     <h1>@(_plexUserId == _ownId ? "Recommended for you" : $"Recommended for {UserName(_plexUserId)}")</h1>
     <div class="controls">
-        @if (_users is not null)
+        @if (_profiles is not null)
         {
             <label>
                 Viewing
                 <select value="@_plexUserId" @onchange="ChangeUserAsync">
-                    @foreach (var (id, name) in _users)
+                    @foreach (var profile in _profiles)
                     {
-                        <option value="@id">@name</option>
+                        <option value="@profile.PlexUserId">@profile.Username</option>
                     }
                 </select>
             </label>
@@ -32,7 +30,7 @@
 
 @if (_message is not null)
 {
-    <div class="toast @(_messageIsError ? "error" : "")" @onclick="() => _message = null">@_message</div>
+    <div class="toast @(_messageIsError ? "error" : "")" role="status" @onclick="() => _message = null">@_message</div>
 }
 
 @if (_items is null)
@@ -50,7 +48,7 @@ else
     <div class="grid">
         @foreach (var item in _items.Where(i => i.MediaType == _type))
         {
-            <RecommendationCard Item="item" Busy="_busy.Contains(item.TmdbId)" CanRequest="_seerrConfigured" OnRequest="() => RequestAsync(item)" />
+            <RecommendationCard @key="(item.MediaType, item.TmdbId)" Item="item" Busy="_busy.Contains(item.TmdbId)" CanRequest="Page.SeerrConfigured" OnRequest="() => RequestAsync(item)" />
         }
     </div>
 }
@@ -60,11 +58,10 @@ else
 
     private string _ownId = "";
     private string _plexUserId = "";
-    private List<(string Id, string Name)>? _users;
+    private IReadOnlyList<ProfileSummary>? _profiles;
     private List<RecommendationView>? _items;
     private MediaType _type = MediaType.Movie;
     private readonly HashSet<int> _busy = [];
-    private bool _seerrConfigured;
     private string? _message;
     private bool _messageIsError;
 
@@ -73,25 +70,15 @@ else
         var user = (await AuthState).User;
         _ownId = _plexUserId = user.PlexUserId() ?? "";
 
-        await using var scope = Scopes.CreateAsyncScope();
-        _seerrConfigured = scope.ServiceProvider.GetRequiredService<SeerrService>().IsConfigured;
+        // The admin can look at (and request for) every profile, which helps when tuning.
         if (user.IsAdmin())
-        {
-            // The admin can look at (and request for) every profile, which helps when tuning.
-            _users = (await scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>().Users.AsNoTracking()
-                    .OrderBy(u => u.Username)
-                    .Select(u => new { u.PlexUserId, u.Username })
-                    .ToListAsync())
-                .Select(u => (u.PlexUserId, u.Username))
-                .ToList();
-        }
+            _profiles = await Page.GetProfilesAsync();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
-        await using var scope = Scopes.CreateAsyncScope();
-        _items = (await scope.ServiceProvider.GetRequiredService<RecommendationReader>().GetAsync(_plexUserId, null))?.ToList() ?? [];
+        _items = (await Page.GetRecommendationsAsync(_plexUserId)).ToList();
         if (_items.Count > 0 && _items.All(i => i.MediaType != _type))
             _type = _items[0].MediaType;
     }
@@ -114,9 +101,7 @@ else
             return;
         try
         {
-            await using var scope = Scopes.CreateAsyncScope();
-            var outcome = await scope.ServiceProvider.GetRequiredService<SeerrService>()
-                .RequestAsync(_plexUserId, item.MediaType, item.TmdbId, "web");
+            var outcome = await Page.RequestAsync(_plexUserId, item.MediaType, item.TmdbId);
             if (outcome.Kind == RequestOutcomeKind.Created)
             {
                 var index = _items!.IndexOf(item);
@@ -142,5 +127,5 @@ else
 
     private int Count(MediaType type) => _items?.Count(i => i.MediaType == type) ?? 0;
 
-    private string UserName(string id) => _users?.FirstOrDefault(u => u.Id == id).Name ?? id;
+    private string UserName(string id) => _profiles?.FirstOrDefault(p => p.PlexUserId == id)?.Username ?? id;
 }
