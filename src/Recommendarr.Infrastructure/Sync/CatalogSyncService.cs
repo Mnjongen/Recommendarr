@@ -37,6 +37,11 @@ public sealed class CatalogSyncService(
             .Where(i => i.MetadataFetchedAt == null || i.MetadataFetchedAt < staleBefore || !db.ItemLinks.Any(l => l.SourceItemId == i.Id))
             .ToListAsync(ct);
 
+        if (seeds.Count > 0)
+            logger.LogInformation("Expanding {Count} watched titles into candidates", seeds.Count);
+        var seedProgress = new ProgressLog(logger, "Expanding watched titles", seeds.Count);
+        var seedsDone = 0;
+
         foreach (var seed in seeds)
         {
             if (seed.MetadataFetchedAt is null || seed.MetadataFetchedAt < staleBefore)
@@ -55,8 +60,10 @@ public sealed class CatalogSyncService(
             await ReplaceLinksAsync(seed, ItemLinkKind.Recommendation, recommendationItems, ct);
             await ReplaceLinksAsync(seed, ItemLinkKind.Similar, similarItems, ct);
             await db.SaveChangesAsync(ct);
+            seedProgress.Report(++seedsDone);
         }
 
+        logger.LogInformation("Fetching trending titles");
         foreach (var type in new[] { MediaType.Movie, MediaType.Tv })
             await AddCandidatesAsync(catalog, await metadata.GetTrendingAsync(type, ct), ct);
         await db.SaveChangesAsync(ct);
@@ -65,11 +72,17 @@ public sealed class CatalogSyncService(
         var pending = await db.Items
             .Where(i => i.MetadataFetchedAt == null || i.MetadataFetchedAt < staleBefore)
             .ToListAsync(ct);
+        if (pending.Count > 0)
+            logger.LogInformation("Fetching TMDB metadata for {Count} items", pending.Count);
+        var pendingProgress = new ProgressLog(logger, "Fetching TMDB metadata", pending.Count);
+        var pendingDone = 0;
         foreach (var item in pending)
         {
             await RefreshAsync(item, now, ct);
-            if (++fetched % SaveBatchSize == 0)
+            fetched++;
+            if (++pendingDone % SaveBatchSize == 0)
                 await db.SaveChangesAsync(ct);
+            pendingProgress.Report(pendingDone);
         }
         await db.SaveChangesAsync(ct);
 

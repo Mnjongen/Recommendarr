@@ -30,7 +30,10 @@ public sealed class HistorySyncService(
         foreach (var user in users)
         {
             var syncStartedAt = time.GetUtcNow();
+            logger.LogInformation("Fetching watch history for {User}", user.Username);
             var events = await history.GetHistoryAsync(user.PlexUserId, user.LastHistorySync, ct);
+            var progress = new ProgressLog(logger, $"Resolving plays for {user.Username}", events.Count);
+            var processed = 0;
 
             var keys = events.Select(e => e.SourceKey).OfType<string>().Distinct().ToList();
             var seen = (await db.WatchEvents
@@ -42,6 +45,7 @@ public sealed class HistorySyncService(
             var userPlays = 0;
             foreach (var e in events)
             {
+                progress.Report(processed++);
                 if (e.SourceKey is not null && !seen.Add(e.SourceKey))
                     continue;
 

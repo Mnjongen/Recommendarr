@@ -31,12 +31,17 @@ public sealed class EmbeddingService(
         if (recreated)
             logger.LogInformation("Vector store (re)created for {Model} ({Dimensions} dimensions)", modelId, probe.Length);
 
+        // Stubs that TMDB had no details for (no genres, no overview) would embed as a bare title.
+        var pending = db.Items.Where(i => i.EmbeddedAt == null && i.MetadataFetchedAt != null && (i.Overview != null || i.Genres != ""));
+        var total = await pending.CountAsync(ct);
+        if (total > 0)
+            logger.LogInformation("Embedding {Count} items", total);
+        var progress = new ProgressLog(logger, "Embedding", total);
+
         var embedded = 0;
         while (true)
         {
-            // Stubs that TMDB had no details for (no genres, no overview) would embed as a bare title.
-            var batch = await db.Items
-                .Where(i => i.EmbeddedAt == null && i.MetadataFetchedAt != null && (i.Overview != null || i.Genres != ""))
+            var batch = await pending
                 .OrderBy(i => i.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
@@ -64,6 +69,7 @@ public sealed class EmbeddingService(
             }
             await db.SaveChangesAsync(ct);
             embedded += batch.Count;
+            progress.Report(embedded);
         }
 
         if (embedded > 0)
