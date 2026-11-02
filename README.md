@@ -53,6 +53,7 @@ The OpenAPI document is served at `/openapi/v1.json`. The API uses the same sign
 | `GET /api/v1/users` | (admin) Users found in Tautulli or Plex, with their `plexUserId` |
 | `GET /api/v1/users/{plexUserId}/recommendations?type=Movie\|Tv` | Ranked recommendations, each with a reason and its Seerr availability |
 | `POST /api/v1/users/{plexUserId}/requests` | Request a title in Seerr as that user. Body: `{ "mediaType": "Movie", "tmdbId": 603 }` |
+| `POST /api/v1/users/{plexUserId}/feedback` | Rate a catalog title as that user. Body: `{ "mediaType": "Movie", "tmdbId": 603, "kind": "Like" }` (`Like`, `Dislike`, or `NotInterested`) |
 | `GET /api/v1/seerr/users` | (admin) Seerr accounts that a user can be linked to |
 | `PUT /api/v1/users/{plexUserId}/seerr-user` | (admin) Choose which Seerr account a user requests as. Body: `{ "seerrUserId": 3 }`; `null` goes back to automatic linking |
 

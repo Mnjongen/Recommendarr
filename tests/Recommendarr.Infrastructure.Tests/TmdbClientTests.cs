@@ -128,6 +128,27 @@ public sealed class TmdbClientTests : IDisposable
     }
 
     [Fact]
+    public async Task Search_returns_movies_and_series_but_not_people()
+    {
+        Respond("search/multi", """
+            { "results": [
+              { "id": 603, "media_type": "movie", "title": "The Matrix", "release_date": "1999-03-30", "overview": "A hacker.", "poster_path": "/m.jpg", "vote_average": 8.2 },
+              { "id": 6384, "media_type": "person", "name": "Keanu Reeves" },
+              { "id": 1396, "media_type": "tv", "name": "Matrix Show", "first_air_date": "2008-01-20", "overview": "" }
+            ] }
+            """, ("query", "matrix"));
+
+        var results = await _client.SearchAsync("matrix");
+
+        Assert.Equal(
+            [
+                new MediaSearchResult(603, MediaType.Movie, "The Matrix", 1999, "A hacker.", "/m.jpg", 8.2),
+                new MediaSearchResult(1396, MediaType.Tv, "Matrix Show", 2008, null, null, 0),
+            ],
+            results);
+    }
+
+    [Fact]
     public async Task FindTmdbId_falls_back_to_imdb_when_tvdb_has_no_match()
     {
         Respond("find/81189", """{ "movie_results": [], "tv_results": [] }""", ("external_source", "tvdb_id"));

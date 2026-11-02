@@ -102,6 +102,22 @@ public sealed class TmdbClient : IMetadataSource
         return match?.Id;
     }
 
+    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken ct = default)
+    {
+        var results = (await GetAsync<ListDto>($"search/multi?query={Uri.EscapeDataString(query)}", ct))?.Results ?? [];
+        return results
+            .Where(r => r.MediaType is "movie" or "tv")
+            .Select(r => new MediaSearchResult(
+                r.Id,
+                r.MediaType == "movie" ? MediaType.Movie : MediaType.Tv,
+                r.Title ?? r.Name ?? "",
+                ParseYear(r.ReleaseDate ?? r.FirstAirDate),
+                string.IsNullOrWhiteSpace(r.Overview) ? null : r.Overview,
+                r.PosterPath,
+                r.VoteAverage))
+            .ToList();
+    }
+
     /// <summary>Lowercase letters and digits only, so "Dr. STONE" matches "Dr. Stone".</summary>
     private static string NormalizeTitle(string title) =>
         string.Concat(title.Where(char.IsLetterOrDigit)).ToLowerInvariant();
@@ -197,6 +213,11 @@ public sealed class TmdbClient : IMetadataSource
         public string? Name { get; init; }
         public string? OriginalTitle { get; init; }
         public string? OriginalName { get; init; }
+        public string? MediaType { get; init; }
+        public string? ReleaseDate { get; init; }
+        public string? FirstAirDate { get; init; }
+        public string? Overview { get; init; }
+        public string? PosterPath { get; init; }
         public double VoteAverage { get; init; }
         public int VoteCount { get; init; }
         public double Popularity { get; init; }

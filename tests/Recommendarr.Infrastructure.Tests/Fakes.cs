@@ -57,6 +57,9 @@ internal sealed class FakeMetadataSource : IMetadataSource
     public Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default) =>
         Task.FromResult<int?>(Search.TryGetValue((type, title), out var id) ? id : null);
 
+    public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<MediaSearchResult>>([]);
+
     public static MediaMetadata Metadata(MediaType type, int tmdbId, string title, params string[] genres) =>
         new(tmdbId, type, title, 2000, $"{title} overview", genres, ["keyword"], ["Actor"], ["Director"], 7.5, 1000, 10, "/p.jpg");
 

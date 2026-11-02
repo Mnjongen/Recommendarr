@@ -35,6 +35,20 @@ public static class RecommendationEndpoints
                 : Results.NotFound();
         });
 
+        signedIn.MapPost("/users/{plexUserId}/feedback", async (
+            string plexUserId, FeedbackBody body, ClaimsPrincipal user, RecommendationFeedbackService feedback, CancellationToken ct) =>
+        {
+            if (!user.CanActFor(plexUserId))
+                return Results.Forbid();
+            return await feedback.RecordAsync(plexUserId, body.MediaType, body.TmdbId, body.Kind, ct) switch
+            {
+                FeedbackOutcome.Saved => Results.NoContent(),
+                FeedbackOutcome.UserNotFound => Results.Problem("Unknown user.", statusCode: StatusCodes.Status404NotFound),
+                FeedbackOutcome.ItemNotFound => Results.Problem("Unknown title.", statusCode: StatusCodes.Status404NotFound),
+                _ => Results.Problem("Unknown feedback kind.", statusCode: StatusCodes.Status400BadRequest),
+            };
+        });
+
         signedIn.MapPost("/users/{plexUserId}/requests", async (
             string plexUserId, RequestBody body, ClaimsPrincipal user, SeerrService seerr, CancellationToken ct) =>
         {
@@ -70,3 +84,5 @@ public static class RecommendationEndpoints
 public sealed record RequestBody(MediaType MediaType, int TmdbId);
 
 public sealed record SeerrLinkBody(int? SeerrUserId);
+
+public sealed record FeedbackBody(MediaType MediaType, int TmdbId, FeedbackKind Kind);

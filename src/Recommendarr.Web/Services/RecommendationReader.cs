@@ -17,7 +17,8 @@ public sealed record RecommendationView(
     string? Reason,
     AvailabilityStatus? Availability,
     string? PosterUrl,
-    DateTimeOffset GeneratedAt)
+    DateTimeOffset GeneratedAt,
+    FeedbackKind? Feedback = null)
 {
     /// <summary>Titles that are on Plex, or already on their way, can't be requested again.</summary>
     public bool CanRequest => Availability is null or AvailabilityStatus.NotRequested or AvailabilityStatus.Deleted;
@@ -35,7 +36,9 @@ public sealed class RecommendationReader(RecommendarrDbContext db)
         if (user is null)
             return null;
 
-        var query = db.Recommendations.AsNoTracking().Where(r => r.UserId == user.Id);
+        var query = db.Recommendations.AsNoTracking()
+            .Where(r => r.UserId == user.Id)
+            .Where(r => !db.Feedback.Any(f => f.UserId == user.Id && f.ItemId == r.ItemId && f.Kind != FeedbackKind.Like));
         if (type is { } t)
             query = query.Where(r => r.Item.MediaType == t);
 
@@ -45,6 +48,7 @@ public sealed class RecommendationReader(RecommendarrDbContext db)
             .Select(r => new
             {
                 r.Rank,
+                r.ItemId,
                 r.Item.MediaType,
                 r.Item.TmdbId,
                 r.Item.Title,
@@ -60,6 +64,11 @@ public sealed class RecommendationReader(RecommendarrDbContext db)
             })
             .ToListAsync(ct);
 
+        var itemIds = rows.Select(r => r.ItemId).ToList();
+        var likes = await db.Feedback.AsNoTracking()
+            .Where(f => f.UserId == user.Id && f.Kind == FeedbackKind.Like && itemIds.Contains(f.ItemId))
+            .ToDictionaryAsync(f => f.ItemId, f => (FeedbackKind?)f.Kind, ct);
+
         return rows.Select(r => new RecommendationView(
                 r.Rank,
                 r.MediaType,
@@ -73,7 +82,8 @@ public sealed class RecommendationReader(RecommendarrDbContext db)
                 r.Reason,
                 r.Availability,
                 r.PosterPath is null ? null : PosterBaseUrl + r.PosterPath,
-                r.GeneratedAt))
+                r.GeneratedAt,
+                likes.GetValueOrDefault(r.ItemId)))
             .ToList();
     }
 }

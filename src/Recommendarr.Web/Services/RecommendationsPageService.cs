@@ -19,6 +19,10 @@ public interface IRecommendationsPageService
     Task<IReadOnlyList<RecommendationView>> GetRecommendationsAsync(string plexUserId, CancellationToken ct = default);
 
     Task<RequestOutcome> RequestAsync(string plexUserId, MediaType type, int tmdbId, CancellationToken ct = default);
+
+    Task<FeedbackOutcome> RecordFeedbackAsync(string plexUserId, MediaType type, int tmdbId, FeedbackKind kind, CancellationToken ct = default);
+
+    Task<IReadOnlyList<RecommendationView>> SearchAsync(string plexUserId, string query, CancellationToken ct = default);
 }
 
 /// <remarks>
@@ -49,5 +53,18 @@ public sealed class RecommendationsPageService(IServiceScopeFactory scopes, IOpt
     {
         await using var scope = scopes.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<SeerrService>().RequestAsync(plexUserId, type, tmdbId, "web", ct);
+    }
+
+    public async Task<FeedbackOutcome> RecordFeedbackAsync(string plexUserId, MediaType type, int tmdbId, FeedbackKind kind, CancellationToken ct = default)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<RecommendationFeedbackService>()
+            .RecordAsync(plexUserId, type, tmdbId, kind, ct);
+    }
+
+    public async Task<IReadOnlyList<RecommendationView>> SearchAsync(string plexUserId, string query, CancellationToken ct = default)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<TitleSearchService>().SearchAsync(plexUserId, query, ct) ?? [];
     }
 }

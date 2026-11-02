@@ -6,6 +6,7 @@
         <Authorized>
             <nav>
                 <NavLink href="/" Match="NavLinkMatch.All">Recommendations</NavLink>
+                <NavLink href="/search">Search</NavLink>
                 <AuthorizeView Policy="@AuthConstants.AdminPolicy" Context="admin">
                     <NavLink href="/admin">Admin</NavLink>
                 </AuthorizeView>

@@ -27,6 +27,8 @@ builder.Services.AddSingleton<SyncCoordinator>();
 builder.Services.AddHostedService<SyncJob>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<RecommendationReader>();
+builder.Services.AddScoped<RecommendationFeedbackService>();
+builder.Services.AddScoped<TitleSearchService>();
 builder.Services.AddScoped<IRecommendationsPageService, RecommendationsPageService>();
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));

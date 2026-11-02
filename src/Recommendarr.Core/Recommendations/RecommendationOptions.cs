@@ -21,6 +21,9 @@ public sealed class RecommendationOptions
     /// <summary>Extra weight per doubling of plays of the same title (rewatches, or episodes of a show).</summary>
     public double RewatchBonus { get; set; } = 0.25;
 
+    /// <summary>Weight of an explicitly liked title when shaping the user's taste profile.</summary>
+    public double LikedItemWeight { get; set; } = 2.0;
+
     /// <summary>Maximum number of taste centroids (k-means clusters) per user; fewer for short histories.</summary>
     public int TasteClusters { get; set; } = 4;
 

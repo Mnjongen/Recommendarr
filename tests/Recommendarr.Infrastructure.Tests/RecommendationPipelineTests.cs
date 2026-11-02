@@ -104,4 +104,42 @@ public sealed class RecommendationPipelineTests : IAsyncLifetime
         Assert.Equal(("Titanic", "Because you watched The Notebook"), (recs[4].Title, recs[4].Reason));
         Assert.DoesNotContain(recs, r => r.Username == "alice" && r.Title == "Die Hard");
     }
+
+    [Fact]
+    public async Task Explicit_likes_shape_taste_and_are_not_recommended_again()
+    {
+        int likedId;
+        int romanceCandidateId;
+        await using (var db = _database.CreateContext())
+        {
+            var actionSeed = Item(1, "Film", "Action|Action");
+            var likedRomance = Item(2, "Film", "Romance|Romance");
+            var actionCandidate = Item(3, "Film", "Action|Action");
+            var romanceCandidate = Item(4, "Film", "Romance|Romance");
+            var alice = new UserEntity { PlexUserId = "1", Username = "alice" };
+            db.AddRange(actionSeed, likedRomance, actionCandidate, romanceCandidate, alice);
+            await db.SaveChangesAsync();
+            likedId = likedRomance.Id;
+            romanceCandidateId = romanceCandidate.Id;
+            db.WatchEvents.Add(new WatchEventEntity
+            {
+                UserId = alice.Id,
+                ItemId = actionSeed.Id,
+                Title = actionSeed.Title,
+                MediaType = MediaType.Movie,
+                WatchedAt = T0.AddDays(-1),
+                PercentComplete = 100,
+            });
+            db.Feedback.Add(new FeedbackEntity { UserId = alice.Id, ItemId = likedRomance.Id, Kind = FeedbackKind.Like, CreatedAt = T0 });
+            await db.SaveChangesAsync();
+        }
+        await EmbedAsync();
+
+        await RecommendAsync();
+
+        await using var check = _database.CreateContext();
+        var recs = await check.Recommendations.Include(r => r.Item).OrderBy(r => r.Rank).ToListAsync();
+        Assert.Equal(romanceCandidateId, recs[0].ItemId);
+        Assert.DoesNotContain(recs, r => r.ItemId == likedId);
+    }
 }

@@ -48,7 +48,8 @@ else
     <div class="grid">
         @foreach (var item in _items.Where(i => i.MediaType == _type))
         {
-            <RecommendationCard @key="(item.MediaType, item.TmdbId)" Item="item" Busy="_busy.Contains(item.TmdbId)" CanRequest="Page.SeerrConfigured" OnRequest="() => RequestAsync(item)" />
+            <RecommendationCard @key="(item.MediaType, item.TmdbId)" Item="item" Busy="_busy.Contains(item.TmdbId)" CanRequest="Page.SeerrConfigured" OnRequest="() => RequestAsync(item)"
+                                FeedbackBusy="_feedbackBusy.Contains(item.TmdbId)" OnFeedback="kind => FeedbackAsync(item, kind)" />
         }
     </div>
 }
@@ -62,6 +63,7 @@ else
     private List<RecommendationView>? _items;
     private MediaType _type = MediaType.Movie;
     private readonly HashSet<int> _busy = [];
+    private readonly HashSet<int> _feedbackBusy = [];
     private string? _message;
     private bool _messageIsError;
 
@@ -120,6 +122,39 @@ else
         finally
         {
             _busy.Remove(item.TmdbId);
+        }
+    }
+
+    private async Task FeedbackAsync(RecommendationView item, FeedbackKind kind)
+    {
+        var user = (await AuthState).User;
+        if (!user.CanActFor(_plexUserId) || !_feedbackBusy.Add(item.TmdbId))
+            return;
+        try
+        {
+            var outcome = await Page.RecordFeedbackAsync(_plexUserId, item.MediaType, item.TmdbId, kind);
+            if (outcome != FeedbackOutcome.Saved)
+            {
+                ShowMessage("Couldn't save your feedback. Try again after the next sync.", error: true);
+                return;
+            }
+
+            if (kind == FeedbackKind.NotInterested)
+                _items!.Remove(item);
+            else
+            {
+                var index = _items!.IndexOf(item);
+                _items[index] = item with { Feedback = kind };
+            }
+            ShowMessage(kind == FeedbackKind.Like ? "Like saved. Recommendations update after the next sync." : "We'll show you fewer titles like this.", error: false);
+        }
+        catch (Exception)
+        {
+            ShowMessage("Couldn't save your feedback. Try again later.", error: true);
+        }
+        finally
+        {
+            _feedbackBusy.Remove(item.TmdbId);
         }
     }
 

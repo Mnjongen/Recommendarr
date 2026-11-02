@@ -31,8 +31,20 @@
         }
         @if (Item.CanRequest && CanRequest)
         {
-            <button class="button small" disabled="@Busy" @onclick="OnRequest">@(Busy ? "Requesting…" : "Request")</button>
+            <button class="button small request" disabled="@Busy" @onclick="OnRequest">@(Busy ? "Requesting…" : "Request")</button>
         }
+        <div class="feedback-actions">
+            <button class="button small feedback-like @(Item.Feedback == FeedbackKind.Like ? "selected" : "")"
+                    aria-label="Like @Item.Title" aria-pressed="@(Item.Feedback == FeedbackKind.Like)"
+                    disabled="@FeedbackBusy" @onclick="() => OnFeedback.InvokeAsync(FeedbackKind.Like)">
+                @(Item.Feedback == FeedbackKind.Like ? "Liked" : "Like")
+            </button>
+            <button class="button small feedback-not-interested @(Item.Feedback == FeedbackKind.NotInterested ? "selected" : "")"
+                    aria-label="Not interested in @Item.Title" aria-pressed="@(Item.Feedback == FeedbackKind.NotInterested)"
+                    disabled="@FeedbackBusy" @onclick="() => OnFeedback.InvokeAsync(FeedbackKind.NotInterested)">
+                Not interested
+            </button>
+        </div>
     </div>
 </article>
 
@@ -45,6 +57,10 @@
     [Parameter] public bool CanRequest { get; set; } = true;
 
     [Parameter] public EventCallback OnRequest { get; set; }
+
+    [Parameter] public bool FeedbackBusy { get; set; }
+
+    [Parameter] public EventCallback<FeedbackKind> OnFeedback { get; set; }
 
     private (string Label, string Css)? Badge => Item.Availability switch
     {

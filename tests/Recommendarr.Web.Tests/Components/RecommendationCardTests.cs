@@ -1,5 +1,6 @@
 using Bunit;
 using Recommendarr.Core.Models;
+using Recommendarr.Infrastructure.Data;
 using Recommendarr.Web.Components.Shared;
 using Recommendarr.Web.Services;
 
@@ -32,7 +33,7 @@ public sealed class RecommendationCardTests : BunitContext
         var cut = Render<RecommendationCard>(p => p.Add(c => c.Item, Item(availability: status)));
 
         Assert.Equal(badge, cut.Find(".badge").TextContent);
-        Assert.Empty(cut.FindAll("button"));
+        Assert.Empty(cut.FindAll(".request"));
     }
 
     [Theory]
@@ -47,7 +48,7 @@ public sealed class RecommendationCardTests : BunitContext
             .Add(c => c.OnRequest, () => requested = true));
 
         Assert.Empty(cut.FindAll(".badge"));
-        cut.Find("button").Click();
+        cut.Find(".request").Click();
         Assert.True(requested);
     }
 
@@ -56,7 +57,7 @@ public sealed class RecommendationCardTests : BunitContext
     {
         var cut = Render<RecommendationCard>(p => p.Add(c => c.Item, Item()).Add(c => c.Busy, true));
 
-        var button = cut.Find("button");
+        var button = cut.Find(".request");
         Assert.True(button.HasAttribute("disabled"));
         Assert.Equal("Requesting…", button.TextContent);
     }
@@ -65,7 +66,7 @@ public sealed class RecommendationCardTests : BunitContext
     public void No_request_button_without_seerr()
     {
         var cut = Render<RecommendationCard>(p => p.Add(c => c.Item, Item()).Add(c => c.CanRequest, false));
-        Assert.Empty(cut.FindAll("button"));
+        Assert.Empty(cut.FindAll(".request"));
     }
 
     [Fact]

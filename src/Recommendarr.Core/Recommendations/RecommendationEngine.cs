@@ -41,6 +41,20 @@ public static class RecommendationEngine
         IReadOnlyList<WatchedItem> watched,
         IReadOnlyList<CandidateItem> candidates,
         IReadOnlySet<int> excluded,
+        RecommendationOptions o) =>
+        Score(watched, candidates, excluded, o)
+            .GroupBy(s => s.Candidate.MediaType)
+            .OrderBy(g => g.Key)
+            .SelectMany(g => Diversify(g.ToList(), o)
+                .Select((s, i) => new ScoredRecommendation(
+                    s.Candidate.ItemId, g.Key, i + 1, s.Score, s.Similarity, s.Collaborative, s.Quality, s.BecauseOf)))
+            .ToList();
+
+    /// <summary>Scores every eligible candidate (before diversification); the evaluator ranks the whole pool.</summary>
+    internal static List<Scored> Score(
+        IReadOnlyList<WatchedItem> watched,
+        IReadOnlyList<CandidateItem> candidates,
+        IReadOnlySet<int> excluded,
         RecommendationOptions o)
     {
         if (watched.Count == 0)
@@ -86,14 +100,7 @@ public static class RecommendationEngine
         MinMax(pool, s => s.Quality, (s, x) => s.Quality = x);
         foreach (var s in pool)
             s.Score = o.SimilarityWeight * s.Similarity + o.CollaborativeWeight * s.Collaborative + o.QualityWeight * s.Quality;
-
-        return pool
-            .GroupBy(s => s.Candidate.MediaType)
-            .OrderBy(g => g.Key)
-            .SelectMany(g => Diversify(g.ToList(), o)
-                .Select((s, i) => new ScoredRecommendation(
-                    s.Candidate.ItemId, g.Key, i + 1, s.Score, s.Similarity, s.Collaborative, s.Quality, s.BecauseOf)))
-            .ToList();
+        return pool;
     }
 
     /// <summary>
@@ -135,7 +142,7 @@ public static class RecommendationEngine
             set(s, range > 0 ? (get(s) - min) / range : 0);
     }
 
-    private sealed class Scored(CandidateItem candidate, float[] vector)
+    internal sealed class Scored(CandidateItem candidate, float[] vector)
     {
         public CandidateItem Candidate { get; } = candidate;
         public float[] Vector { get; } = vector;

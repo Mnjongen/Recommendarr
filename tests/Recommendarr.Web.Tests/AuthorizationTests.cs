@@ -72,6 +72,28 @@ public sealed class AuthorizationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Feedback_is_saved_for_the_signed_in_profile()
+    {
+        var response = await _app.CreateClient("1").PostAsJsonAsync("/api/v1/users/1/feedback", new { mediaType = "Movie", tmdbId = 603, kind = "Like" });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>();
+        Assert.Equal(FeedbackKind.Like, Assert.Single(db.Feedback).Kind);
+
+        var recommendations = await _app.CreateClient("1").GetFromJsonAsync<List<Dictionary<string, object?>>>("/api/v1/users/1/recommendations");
+        Assert.Equal("Like", Assert.Single(recommendations!).GetValueOrDefault("feedback")?.ToString());
+    }
+
+    [Fact]
+    public async Task Feedback_for_someone_else_is_refused()
+    {
+        var response = await _app.CreateClient("2").PostAsJsonAsync("/api/v1/users/1/feedback", new { mediaType = "Movie", tmdbId = 603, kind = "NotInterested" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Api_errors_are_not_replaced_by_the_html_not_found_page()
     {
         var response = await _app.CreateClient(profile: null).GetAsync("/api/v1/users/1/recommendations");

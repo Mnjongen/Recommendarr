@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Options;
 using Recommendarr.Infrastructure.Plex;
@@ -31,16 +32,21 @@ public sealed class ProfileServiceTests(AppFactory app) : IDisposable
 
         var storage = Microsoft.Extensions.Options.Options.Create(new StorageOptions { DataDirectory = Path.GetTempPath() });
         var plex = new PlexAuthClient(new HttpClient(), storage, new Uri(_plexTv.Url + "/"));
-        return await new ProfileService(plex, db).GetProfilesAsync("token");
+        return await new ProfileService(plex, db, NullLogger<ProfileService>.Instance).GetProfilesAsync("token");
     }
 
     private void HomeUsers(string xml) =>
         _plexTv.Given(Request.Create().WithPath("/api/home/users").UsingGet())
             .RespondWith(Response.Create().WithHeader("Content-Type", "application/xml").WithBody(xml));
 
+    private void Account(string json) =>
+        _plexTv.Given(Request.Create().WithPath("/api/v2/user").UsingGet())
+            .RespondWith(Response.Create().WithHeader("Content-Type", "application/json").WithBody(json));
+
     [Fact]
     public async Task Household_profiles_that_use_this_server_are_offered_admin_first()
     {
+        Account("""{ "id": 56673435, "username": "mnjongen" }""");
         HomeUsers("""
             <MediaContainer>
               <User id="629084215" title="Rhodetje" protected="0" admin="0" />
@@ -52,6 +58,22 @@ public sealed class ProfileServiceTests(AppFactory app) : IDisposable
         var profiles = await GetProfilesAsync();
 
         Assert.Equal([("Mnjongen", true, true), ("Rhodetje", false, false)], profiles.Select(p => (p.Name, p.Protected, p.IsAdmin)));
+    }
+
+    [Fact]
+    public async Task Known_signed_in_account_is_included_when_plex_home_list_omits_it()
+    {
+        Account("""{ "id": 56673435, "username": "mnjongen", "thumb": "https://plex.tv/mnjongen.png" }""");
+        HomeUsers("""
+            <MediaContainer>
+              <User id="999" title="Other home profile" protected="0" admin="0" />
+            </MediaContainer>
+            """);
+
+        var profiles = await GetProfilesAsync();
+
+        var profile = Assert.Single(profiles);
+        Assert.Equal(("56673435", "mnjongen", false, true), (profile.PlexUserId, profile.Name, profile.Protected, profile.IsAdmin));
     }
 
     [Fact]

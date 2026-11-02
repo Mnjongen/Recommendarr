@@ -112,6 +112,9 @@ input, select {
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
 .controls label { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); }
 
+.search-form { display: flex; gap: 0.6rem; margin-bottom: 1.25rem; max-width: 640px; }
+.search-form input { flex: 1; }
+
 .tabs { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
 .tabs button { background: none; border: 0; color: var(--muted); padding: 0.4rem 0.9rem; border-radius: 6px; font: inherit; cursor: pointer; }
 .tabs button.active { background: var(--surface-2); color: var(--text); }
@@ -136,6 +139,9 @@ input, select {
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
 }
 .rec-card .button { margin-top: auto; align-self: flex-start; }
+.rec-card .feedback-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: auto; }
+.rec-card .feedback-actions .button { margin-top: 0; }
+.rec-card .feedback-actions .button.selected { background: var(--ok); }
 
 .badge {
     position: absolute; top: 0.5rem; left: 0.5rem;

@@ -21,3 +21,13 @@ public sealed record MediaMetadata(
 
 /// <summary>A lightweight TMDB list result (recommendations, similar, trending).</summary>
 public sealed record MediaReference(int TmdbId, MediaType MediaType, string Title, double VoteAverage, int VoteCount, double Popularity);
+
+/// <summary>A title found by a free-text TMDB search.</summary>
+public sealed record MediaSearchResult(
+    int TmdbId,
+    MediaType MediaType,
+    string Title,
+    int? Year,
+    string? Overview,
+    string? PosterPath,
+    double VoteAverage);

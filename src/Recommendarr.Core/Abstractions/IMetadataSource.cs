@@ -21,4 +21,7 @@ public interface IMetadataSource
     /// returns a match only when the title is an exact (normalized) match.
     /// </summary>
     Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default);
+
+    /// <summary>Free-text search across movies and series, most relevant first.</summary>
+    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken ct = default);
 }

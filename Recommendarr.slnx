@@ -9,4 +9,7 @@
     <Project Path="tests/Recommendarr.Infrastructure.Tests/Recommendarr.Infrastructure.Tests.csproj" />
     <Project Path="tests/Recommendarr.Web.Tests/Recommendarr.Web.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Recommendarr.Eval/Recommendarr.Eval.csproj" />
+  </Folder>
 </Solution>

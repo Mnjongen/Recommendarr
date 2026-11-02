@@ -50,14 +50,23 @@ public sealed class RecommendationService(
                 .Select(w => new { ItemId = w.ItemId!.Value, w.WatchedAt, w.PercentComplete })
                 .ToListAsync(ct);
             var signals = plays.Select(p => new PlaySignal(p.ItemId, p.WatchedAt, p.PercentComplete)).ToList();
-            var watched = TasteProfile.WeighItems(signals, vectors, now, o);
+            var watched = TasteProfile.WeighItems(signals, vectors, now, o).ToList();
 
-            // Never recommend anything the user has started, even if they abandoned it, or rejected.
+            // Never recommend anything the user has started or explicitly rated.
             var excluded = signals.Select(p => p.ItemId).ToHashSet();
-            excluded.UnionWith(await db.Feedback
-                .Where(f => f.UserId == user.Id && f.Kind != FeedbackKind.Like)
-                .Select(f => f.ItemId)
-                .ToListAsync(ct));
+            var feedback = await db.Feedback.Where(f => f.UserId == user.Id).ToListAsync(ct);
+            excluded.UnionWith(feedback.Select(f => f.ItemId));
+
+            var watchedIds = watched.Select(w => w.ItemId).ToHashSet();
+            foreach (var like in feedback.Where(f => f.Kind == FeedbackKind.Like))
+            {
+                if (!watchedIds.Add(like.ItemId) || !vectors.TryGetValue(like.ItemId, out var vector))
+                    continue;
+
+                var ageDays = Math.Max(0, (now - like.CreatedAt).TotalDays);
+                var recency = Math.Max(o.MinRecencyWeight, Math.Pow(0.5, ageDays / o.RecencyHalfLifeDays));
+                watched.Add(new WatchedItem(like.ItemId, vector, o.LikedItemWeight * recency));
+            }
 
             var recommendations = RecommendationEngine.Recommend(watched, candidates, excluded, o);
 

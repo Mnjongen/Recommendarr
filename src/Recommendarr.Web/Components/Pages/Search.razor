@@ -1,0 +1,105 @@
+@page "/search"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IRecommendationsPageService Page
+
+<PageTitle>Search · Recommendarr</PageTitle>
+
+<div class="page-header">
+    <h1>Search titles</h1>
+</div>
+
+<form class="search-form" @onsubmit="SearchAsync">
+    <input type="search" name="q" placeholder="Search movies and TV shows to like…" aria-label="Search movies and TV shows" @bind="_query" @bind:event="oninput" />
+    <button type="submit" class="button" disabled="@_searching">@(_searching ? "Searching…" : "Search")</button>
+</form>
+
+@if (_message is not null)
+{
+    <div class="toast @(_messageIsError ? "error" : "")" role="status" @onclick="() => _message = null">@_message</div>
+}
+
+@if (_items is null)
+{
+    <p class="muted">Like the titles you love and we'll recommend more like them.</p>
+}
+else if (_items.Count == 0)
+{
+    <div class="empty-state">
+        <p>No movies or TV shows found.</p>
+    </div>
+}
+else
+{
+    <div class="grid">
+        @foreach (var item in _items)
+        {
+            <RecommendationCard @key="(item.MediaType, item.TmdbId)" Item="item" CanRequest="false"
+                                FeedbackBusy="_feedbackBusy.Contains((item.MediaType, item.TmdbId))" OnFeedback="kind => FeedbackAsync(item, kind)" />
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = null!;
+
+    private string _query = "";
+    private bool _searching;
+    private List<RecommendationView>? _items;
+    private readonly HashSet<(MediaType, int)> _feedbackBusy = [];
+    private string? _message;
+    private bool _messageIsError;
+
+    private async Task SearchAsync()
+    {
+        if (_searching || string.IsNullOrWhiteSpace(_query))
+            return;
+        _searching = true;
+        _message = null;
+        try
+        {
+            var plexUserId = (await AuthState).User.PlexUserId() ?? "";
+            _items = (await Page.SearchAsync(plexUserId, _query)).ToList();
+        }
+        catch (Exception)
+        {
+            ShowMessage("Couldn't search right now. Try again later.", error: true);
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private async Task FeedbackAsync(RecommendationView item, FeedbackKind kind)
+    {
+        var user = (await AuthState).User;
+        var plexUserId = user.PlexUserId() ?? "";
+        var key = (item.MediaType, item.TmdbId);
+        if (!user.CanActFor(plexUserId) || !_feedbackBusy.Add(key))
+            return;
+        try
+        {
+            var outcome = await Page.RecordFeedbackAsync(plexUserId, item.MediaType, item.TmdbId, kind);
+            if (outcome != FeedbackOutcome.Saved)
+            {
+                ShowMessage("Couldn't save your feedback. Try again later.", error: true);
+                return;
+            }
+
+            var index = _items!.IndexOf(item);
+            _items[index] = item with { Feedback = kind };
+            ShowMessage(kind == FeedbackKind.Like ? $"Liked {item.Title}. Recommendations update after the next sync." : $"We'll show you fewer titles like {item.Title}.", error: false);
+        }
+        catch (Exception)
+        {
+            ShowMessage("Couldn't save your feedback. Try again later.", error: true);
+        }
+        finally
+        {
+            _feedbackBusy.Remove(key);
+        }
+    }
+
+    private void ShowMessage(string message, bool error) => (_message, _messageIsError) = (message, error);
+}

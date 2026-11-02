@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Recommendarr.Core.Models;
+using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Seerr;
 using Recommendarr.Web.Auth;
 using Recommendarr.Web.Components.Pages;
@@ -68,13 +69,13 @@ public sealed class HomePageTests : BunitContext
         _page.NextOutcome = new RequestOutcome(RequestOutcomeKind.Created, Availability: AvailabilityStatus.Processing);
         var cut = Render<Home>();
 
-        cut.Find(".rec-card button").Click();
+        cut.Find(".request").Click();
 
         cut.WaitForAssertion(() => Assert.Equal("Requested The Matrix.", cut.Find(".toast").TextContent));
         Assert.Equal([("1", MediaType.Movie, 603)], _page.Requests);
         var matrix = cut.FindAll(".rec-card")[0];
         Assert.Equal("Requested", matrix.QuerySelector(".badge")?.TextContent);
-        Assert.Null(matrix.QuerySelector("button"));
+        Assert.Null(matrix.QuerySelector(".request"));
     }
 
     [Fact]
@@ -84,10 +85,10 @@ public sealed class HomePageTests : BunitContext
         _page.NextOutcome = new RequestOutcome(RequestOutcomeKind.Rejected, "Movie Quota exceeded.");
         var cut = Render<Home>();
 
-        cut.Find(".rec-card button").Click();
+        cut.Find(".request").Click();
 
         cut.WaitForAssertion(() => Assert.Equal("Movie Quota exceeded.", cut.Find(".toast.error").TextContent));
-        Assert.NotNull(cut.FindAll(".rec-card")[0].QuerySelector("button")); // still requestable
+        Assert.NotNull(cut.FindAll(".rec-card")[0].QuerySelector(".request"));
     }
 
     [Fact]
@@ -97,7 +98,7 @@ public sealed class HomePageTests : BunitContext
         _page.RequestThrows = true;
         var cut = Render<Home>();
 
-        cut.Find(".rec-card button").Click();
+        cut.Find(".request").Click();
 
         cut.WaitForAssertion(() => Assert.Contains("Couldn't reach Seerr", cut.Find(".toast.error").TextContent));
     }
@@ -130,7 +131,35 @@ public sealed class HomePageTests : BunitContext
         _page.SeerrConfigured = false;
         var cut = Render<Home>();
 
-        Assert.Empty(cut.FindAll(".rec-card button"));
+        Assert.Empty(cut.FindAll(".request"));
+    }
+
+    [Fact]
+    public void A_like_is_saved_and_marked_on_the_card()
+    {
+        SignIn("1");
+        var cut = Render<Home>();
+
+        cut.Find(".feedback-like").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("Like saved. Recommendations update after the next sync.", cut.Find(".toast").TextContent));
+        Assert.Equal([("1", MediaType.Movie, 603, FeedbackKind.Like)], _page.Feedback);
+        Assert.Equal("Liked", cut.Find(".feedback-like").TextContent.Trim());
+        Assert.True(cut.Find(".feedback-like").HasAttribute("aria-pressed"));
+    }
+
+    [Fact]
+    public void Not_interested_feedback_removes_the_title_from_the_list()
+    {
+        SignIn("1");
+        var cut = Render<Home>();
+
+        cut.Find(".feedback-not-interested").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("We'll show you fewer titles like this.", cut.Find(".toast").TextContent));
+        Assert.Equal("The Matrix Reloaded", Assert.Single(Titles(cut)));
+        Assert.Single(cut.FindAll(".rec-card"));
+        Assert.Equal([("1", MediaType.Movie, 603, FeedbackKind.NotInterested)], _page.Feedback);
     }
 
     private sealed class FakePageService : IRecommendationsPageService
@@ -138,6 +167,8 @@ public sealed class HomePageTests : BunitContext
         public Dictionary<string, List<RecommendationView>> Recommendations { get; } = [];
 
         public List<(string, MediaType, int)> Requests { get; } = [];
+
+        public List<(string, MediaType, int, FeedbackKind)> Feedback { get; } = [];
 
         public RequestOutcome NextOutcome { get; set; } = new(RequestOutcomeKind.Created);
 
@@ -157,6 +188,20 @@ public sealed class HomePageTests : BunitContext
                 throw new HttpRequestException("Connection refused");
             Requests.Add((plexUserId, type, tmdbId));
             return Task.FromResult(NextOutcome);
+        }
+
+        public Task<FeedbackOutcome> RecordFeedbackAsync(string plexUserId, MediaType type, int tmdbId, FeedbackKind kind, CancellationToken ct = default)
+        {
+            Feedback.Add((plexUserId, type, tmdbId, kind));
+            return Task.FromResult(FeedbackOutcome.Saved);
+        }
+
+        public List<string> Searches { get; } = [];
+
+        public Task<IReadOnlyList<RecommendationView>> SearchAsync(string plexUserId, string query, CancellationToken ct = default)
+        {
+            Searches.Add(query);
+            return Task.FromResult<IReadOnlyList<RecommendationView>>(Recommendations.GetValueOrDefault("search") ?? []);
         }
     }
 }
