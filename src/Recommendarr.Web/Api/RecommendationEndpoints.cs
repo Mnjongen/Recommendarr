@@ -26,9 +26,9 @@ public static class RecommendationEndpoints
                 .ToListAsync(ct));
 
         signedIn.MapGet("/users/{plexUserId}/recommendations", async (
-            string plexUserId, MediaType? type, ClaimsPrincipal user, RecommendationReader reader, CancellationToken ct) =>
+            string plexUserId, MediaType? type, ClaimsPrincipal user, CurrentAdminAuthorization authorization, RecommendationReader reader, CancellationToken ct) =>
         {
-            if (!user.CanActFor(plexUserId))
+            if (!await authorization.CanActForAsync(user, plexUserId, ct))
                 return Results.Forbid();
             return await reader.GetAsync(plexUserId, type, ct) is { } recommendations
                 ? Results.Ok(recommendations)
@@ -36,9 +36,9 @@ public static class RecommendationEndpoints
         });
 
         signedIn.MapPost("/users/{plexUserId}/feedback", async (
-            string plexUserId, FeedbackBody body, ClaimsPrincipal user, RecommendationFeedbackService feedback, CancellationToken ct) =>
+            string plexUserId, FeedbackBody body, ClaimsPrincipal user, CurrentAdminAuthorization authorization, RecommendationFeedbackService feedback, CancellationToken ct) =>
         {
-            if (!user.CanActFor(plexUserId))
+            if (!await authorization.CanActForAsync(user, plexUserId, ct))
                 return Results.Forbid();
             return await feedback.RecordAsync(plexUserId, body.MediaType, body.TmdbId, body.Kind, ct) switch
             {
@@ -50,9 +50,9 @@ public static class RecommendationEndpoints
         });
 
         signedIn.MapPost("/users/{plexUserId}/requests", async (
-            string plexUserId, RequestBody body, ClaimsPrincipal user, SeerrService seerr, CancellationToken ct) =>
+            string plexUserId, RequestBody body, ClaimsPrincipal user, CurrentAdminAuthorization authorization, SeerrService seerr, CancellationToken ct) =>
         {
-            if (!user.CanActFor(plexUserId))
+            if (!await authorization.CanActForAsync(user, plexUserId, ct))
                 return Results.Forbid();
             var outcome = await seerr.RequestAsync(plexUserId, body.MediaType, body.TmdbId, "api", ct);
             return outcome.Kind switch

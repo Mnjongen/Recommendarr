@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Recommendarr.Infrastructure.Plex;
 
 namespace Recommendarr.Web.Auth;
@@ -14,18 +15,18 @@ public static class AuthEndpoints
         var auth = app.MapGroup("/auth").ExcludeFromDescription();
 
         // 1. Create a Plex PIN and send the browser to app.plex.tv to approve it.
-        auth.MapGet("/plex/start", async (HttpContext http, PlexAuthClient plex, CancellationToken ct) =>
+        auth.MapGet("/plex/start", async (HttpContext http, PlexAuthClient plex, IOptions<WebOptions> webOptions, CancellationToken ct) =>
         {
             var pin = await plex.CreatePinAsync(ct);
             http.Response.Cookies.Append(AuthConstants.PinCookie, pin.Id.ToString(), new CookieOptions
             {
                 HttpOnly = true,
                 SameSite = SameSiteMode.Lax, // must survive the top-level redirect back from app.plex.tv
-                Secure = http.Request.IsHttps,
+                Secure = true,
                 MaxAge = TimeSpan.FromMinutes(15),
                 IsEssential = true,
             });
-            var callback = $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}/auth/plex/callback";
+            var callback = BuildCallbackUrl(http, webOptions.Value);
             return Results.Redirect(plex.GetAuthUrl(pin, callback));
         });
 
@@ -110,6 +111,22 @@ public static class AuthEndpoints
                     // A body keeps the status-code pages from turning this into the "not found" page.
                     ? Results.Text("This form has expired. Go back, reload the page and try again.", statusCode: StatusCodes.Status400BadRequest)
                     : await next(ctx));
+
+    internal static string BuildCallbackUrl(HttpContext http, WebOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.PublicUrl))
+            return $"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}/auth/plex/callback";
+
+        if (!Uri.TryCreate(options.PublicUrl, UriKind.Absolute, out var publicUrl) ||
+            publicUrl.Scheme != Uri.UriSchemeHttps ||
+            publicUrl.AbsolutePath != "/" ||
+            !string.IsNullOrEmpty(publicUrl.Query) ||
+            !string.IsNullOrEmpty(publicUrl.Fragment) ||
+            !string.IsNullOrEmpty(publicUrl.UserInfo))
+            throw new InvalidOperationException("Recommendarr:Web:PublicUrl must be an HTTPS origin without a path, query, or credentials.");
+
+        return $"{publicUrl.GetLeftPart(UriPartial.Authority)}{http.Request.PathBase}/auth/plex/callback";
+    }
 
     /// <summary>Signed in with Plex, profile not picked yet.</summary>
     private static Task SignInPendingAsync(HttpContext http, string token) =>
