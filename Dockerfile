@@ -15,7 +15,8 @@ RUN dotnet restore src/Recommendarr.Web/Recommendarr.Web.csproj -a $TARGETARCH
 
 COPY src/ src/
 # Publishing for the target RID copies the matching sqlite-vec native (vec0.so) into the output.
-RUN dotnet publish src/Recommendarr.Web/Recommendarr.Web.csproj -a $TARGETARCH --no-restore -c Release -o /app -p:Version=$VERSION
+# Not --no-restore: the framework's blazor.web.js is only restored once .razor files are present.
+RUN dotnet publish src/Recommendarr.Web/Recommendarr.Web.csproj -a $TARGETARCH -c Release -o /app -p:Version=$VERSION
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
