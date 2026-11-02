@@ -140,6 +140,7 @@ public sealed class OnnxEmbeddingGenerator(
             var vocabPath = await DownloadIfMissingAsync(directory, "vocab.txt", "vocab.txt", ct);
 
             _tokenizer = BertTokenizer.Create(vocabPath);
+            OrtEnv.Instance().DisableTelemetryEvents();
             _session = new InferenceSession(modelPath);
             logger.LogInformation("Loaded embedding model {Model}", Repository);
         }
