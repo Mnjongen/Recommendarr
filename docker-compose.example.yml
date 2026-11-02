@@ -12,6 +12,10 @@ services:
     volumes:
       - ./config:/config
     environment:
+      # Required for internet-facing deployments: terminate TLS at a reverse proxy,
+      # then set both values to the public hostname.
+      # AllowedHosts: recommendarr.example.com
+      # Recommendarr__Web__PublicUrl: https://recommendarr.example.com
       # History source: Tautulli or Plex
       Recommendarr__History__Provider: Tautulli
       Recommendarr__Tautulli__BaseUrl: http://tautulli:8181

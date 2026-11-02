@@ -23,9 +23,11 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
+builder.Services.Configure<WebOptions>(builder.Configuration.GetSection(WebOptions.Section));
 builder.Services.AddSingleton<SyncCoordinator>();
 builder.Services.AddHostedService<SyncJob>();
 builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<CurrentAdminAuthorization>();
 builder.Services.AddScoped<RecommendationReader>();
 builder.Services.AddScoped<RecommendationFeedbackService>();
 builder.Services.AddScoped<TitleSearchService>();
@@ -45,6 +47,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         o.Cookie.Name = "recommendarr";
         o.Cookie.HttpOnly = true;
         o.Cookie.SameSite = SameSiteMode.Lax;
+        o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         o.ExpireTimeSpan = TimeSpan.FromDays(30);
         o.SlidingExpiration = true;
         o.LoginPath = "/login";
@@ -66,8 +69,9 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(AuthConstants.AdminPolicy, p => p
         .RequireAuthenticatedUser()
         .RequireClaim(AuthConstants.StageClaim, AuthConstants.ProfileStage)
-        .RequireRole(AuthConstants.AdminRole));
+        .AddRequirements(new CurrentAdminRequirement()));
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddScoped<IAuthorizationHandler, CurrentAdminAuthorizationHandler>();
 
 var app = builder.Build();
 
