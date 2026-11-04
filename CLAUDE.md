@@ -15,8 +15,16 @@ dotnet test --filter "FullyQualifiedName~VectorMathTests.Cosine_of_identical_vec
 dotnet run --project src/Recommendarr.Web                               # health: GET /api/v1/health
 dotnet ef migrations add <Name> -p src/Recommendarr.Infrastructure -s src/Recommendarr.Web -o Data/Migrations
 docker build -t recommendarr .
-git tag v0.1.0 && git push origin v0.1.0   # release: tests, multi-arch image to GHCR, GitHub release
+git tag v0.2.0 && git push origin v0.2.0   # release: tests, multi-arch image to GHCR, GitHub release
 ```
+Browser tests:
+```sh
+npm ci
+npx playwright install firefox             # once per machine
+npm run test:e2e
+npm run test:e2e:report                    # serves the last HTML report on IPv4 loopback
+```
+
 CI (`.github/workflows/ci.yml`) runs on PRs targeting `main` and manual dispatch; it reuses `.github/workflows/tests.yml` for .NET and Firefox tests and builds the Docker image. Dev commits get focused local checks, with the full suite required on the promotion PR. `release.yml` runs the same tests before publishing on `v*.*.*` tags.
 Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 
@@ -54,8 +62,18 @@ Tuning knobs live in `RecommendationOptions`. Component scores are min-max norma
 - `PlexUserId` is the plex.tv account id everywhere (Tautulli's `user_id` uses the same id). The one exception is the Plex server's history API, where the owner is account `1`; `PlexHistoryProvider` maps this.
 - Every HttpClient uses `Http/Ipv4FirstConnector` as its connect callback, unless `Network:PreferIPv4=false`. It's registered through `ConfigureHttpClientDefaults`. The developer's home IPv6 route to TMDB's CDN resets about a third of TLS handshakes, and .NET can't fall back once TCP has connected. Sync failures are stored in `JobRuns.Message` with their inner causes (`SyncJob.Describe`).
 - Tests stub HTTP with WireMock.Net. WireMock splits comma-separated query values, so assert those against `RequestMessage.AbsoluteUrl`.
+- Telegram is optional and uses long polling via `Web/Jobs/TelegramBotJob`; no public webhook is required. `Recommendarr:Telegram:BotToken` enables it and `DigestHourUtc` is the UTC hour for opt-in daily digests. Profiles pair from the signed-in `/telegram` page using a single-use, 10-minute code stored as a hash. The bot accepts private chats only; callback actions revalidate chat/profile ownership before feedback or Seerr requests. Requests use the existing `SeerrService` with origin `telegram`.
+- `tests/Recommendarr.Web.E2EHost` runs the production Razor app in a separate test-only host with isolated seeded SQLite and deterministic fake TMDB/Seerr services. Its `/__e2e/sign-in/{plexUserId}` route is loopback-only and must never be added to the production host. Playwright covers public sign-in/error/redirect/not-found flows and signed-in recommendations, search/feedback, requests, admin, and Telegram settings. Browser tests never call live Plex/TMDB/Seerr/Telegram.
 
 ## Configuration
 - Every setting lives under the `Recommendarr` section; in env vars that becomes `Recommendarr__Section__Key`. The option classes are in `Infrastructure/Options/RecommendarrOptions.cs`.
 - `Storage:DataDirectory` defaults to `config` (relative to the working directory) for local runs, and `/config` in Docker.
+- When launching with `dotnet run --project src/Recommendarr.Web` from the repository root, set `Recommendarr__Storage__DataDirectory` to `src/Recommendarr.Web/config` if you intend to use that existing local database; otherwise the relative default can open/create a different `config/recommendarr.db`.
 - Put local secrets in `src/Recommendarr.Web/appsettings.Local.json`, which is git-ignored. Never commit real keys; the repository is public.
+
+## Git Workflow
+- Use `dev` as the integration branch for ongoing feature work; do not make feature commits directly on `main`.
+- At the start of delivery work, inspect the current branch, remotes, and worktree. Preserve pre-existing changes and stage only files related to the completed functionality.
+- Commit each independently useful functionality to `dev` after focused checks pass. For a small change or work likely to receive follow-ups, ask before syncing/committing.
+- If `dev` does not exist, create it from latest `main` only when doing so will not disturb a dirty worktree; ask before switching when there is risk to existing changes.
+- Open a PR from `dev` to `main` only when the feature is complete, validated, and documented as needed. Do not merge a PR or create a release tag unless explicitly asked.
