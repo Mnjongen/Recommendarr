@@ -48,6 +48,7 @@ builder.Services.AddScoped<RecommendationReader>();
 builder.Services.AddScoped<RecommendationFeedbackService>();
 builder.Services.AddScoped<TitleSearchService>();
 builder.Services.AddScoped<IRecommendationsPageService, RecommendationsPageService>();
+builder.Services.AddScoped<ITelegramSettingsPageService, TelegramSettingsPageService>();
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 

@@ -1,0 +1,203 @@
+@page "/telegram"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITelegramSettingsPageService TelegramSettings
+
+<PageTitle>Telegram · Recommendarr</PageTitle>
+
+<div class="page-header">
+    <h1>Telegram</h1>
+</div>
+
+@if (_message is not null)
+{
+    <div class="toast @(_messageIsError ? "error" : "")" role="@(_messageIsError ? "alert" : "status")">@_message</div>
+}
+
+@if (_loading)
+{
+    <p class="muted">Loading Telegram settings…</p>
+}
+else if (_settings is null)
+{
+    <div class="empty-state">This profile could not be found.</div>
+}
+else if (!_settings.IsConfigured)
+{
+    <section class="panel">
+        <h2>Telegram isn’t configured</h2>
+        <p class="muted">The server administrator must configure a Telegram bot token before profiles can connect.</p>
+    </section>
+}
+else if (!_settings.IsLinked)
+{
+    <section class="panel">
+        <h2>Connect your Telegram chat</h2>
+        <p class="muted">Generate a short-lived code, then send its command to the Recommendarr bot in a private chat.</p>
+        <button class="button" disabled="@_busy" @onclick="CreateLinkCodeAsync">
+            @(_busy ? "Generating…" : "Generate link code")
+        </button>
+        @if (_linkCode is not null && _linkExpiresAt is { } expiresAt)
+        {
+            <div class="link-code" role="status">
+                <p>Send this command to your bot within 10 minutes:</p>
+                <p><code>/start @_linkCode</code></p>
+                <p class="muted">Code expires at @expiresAt.ToString("HH:mm 'UTC'").</p>
+                <button class="button small" disabled="@_busy" @onclick="CheckConnectionAsync">Check connection</button>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="panel">
+        <h2>Connected</h2>
+        <p class="muted">This Telegram chat is linked to your Recommendarr profile.</p>
+        <label class="telegram-digest-setting">
+            <input type="checkbox" checked="@_settings.DigestEnabled" disabled="@_busy" @onchange="SetDigestEnabledAsync" />
+            Receive daily recommendations
+        </label>
+        <p class="muted">Digests are sent after @($"{_settings.DigestHourUtc:00}:00 UTC").</p>
+        <button class="button small" disabled="@_busy" @onclick="UnlinkAsync">Unlink Telegram</button>
+    </section>
+}
+
+@code {
+    private string? _plexUserId;
+    private TelegramSettingsState? _settings;
+    private string? _linkCode;
+    private DateTimeOffset? _linkExpiresAt;
+    private string? _message;
+    private bool _messageIsError;
+    private bool _busy;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _plexUserId = user.PlexUserId();
+        await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task CreateLinkCodeAsync()
+    {
+        if (_plexUserId is null || _busy)
+            return;
+
+        _busy = true;
+        _message = null;
+        _linkCode = null;
+        try
+        {
+            var result = await TelegramSettings.CreateLinkCodeAsync(_plexUserId);
+            if (result.Status == TelegramSettingsStatus.Success)
+            {
+                _linkCode = result.Code;
+                _linkExpiresAt = result.ExpiresAt;
+                ShowMessage("Link code generated.", error: false);
+            }
+            else
+            {
+                ShowMessage(result.Status switch
+                {
+                    TelegramSettingsStatus.AlreadyLinked => "This profile is already linked to Telegram.",
+                    TelegramSettingsStatus.NotConfigured => "Telegram is not configured on this server.",
+                    _ => "Could not generate a Telegram link code.",
+                }, error: true);
+                await LoadAsync();
+            }
+        }
+        catch (Exception)
+        {
+            ShowMessage("Could not generate a Telegram link code. Try again.", error: true);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SetDigestEnabledAsync(ChangeEventArgs args)
+    {
+        if (_plexUserId is null || _busy || args.Value is not bool enabled)
+            return;
+
+        _busy = true;
+        _message = null;
+        try
+        {
+            var result = await TelegramSettings.SetDigestEnabledAsync(_plexUserId, enabled);
+            if (result == TelegramSettingsStatus.Success)
+                ShowMessage(enabled ? "Daily recommendations enabled." : "Daily recommendations disabled.", error: false);
+            else
+                ShowMessage("Could not update your digest setting.", error: true);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            ShowMessage("Could not update your digest setting. Try again.", error: true);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task UnlinkAsync()
+    {
+        if (_plexUserId is null || _busy)
+            return;
+
+        _busy = true;
+        _message = null;
+        _linkCode = null;
+        try
+        {
+            var result = await TelegramSettings.UnlinkAsync(_plexUserId);
+            if (result == TelegramSettingsStatus.Success)
+                ShowMessage("Telegram disconnected. Daily recommendations are off.", error: false);
+            else
+                ShowMessage("Could not disconnect Telegram. Try again.", error: true);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            ShowMessage("Could not disconnect Telegram. Try again.", error: true);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _settings = _plexUserId is null ? null : await TelegramSettings.GetAsync(_plexUserId);
+    }
+
+    private async Task CheckConnectionAsync()
+    {
+        if (_busy)
+            return;
+
+        _busy = true;
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            ShowMessage("Could not check the Telegram connection. Try again.", error: true);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ShowMessage(string message, bool error) => (_message, _messageIsError) = (message, error);
+}

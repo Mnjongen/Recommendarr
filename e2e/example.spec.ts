@@ -8,3 +8,10 @@ test('has title', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Sign in with Plex' }))
     .toHaveAttribute('href', '/auth/plex/start');
 });
+
+test('Telegram settings require a signed-in profile', async ({ page }) => {
+  await page.goto('/telegram');
+
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole('link', { name: 'Sign in with Plex' })).toBeVisible();
+});
