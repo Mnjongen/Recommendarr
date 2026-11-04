@@ -40,6 +40,10 @@ var plays = (await db.WatchEvents.AsNoTracking()
 var items = await db.Items.AsNoTracking().Where(i => i.EmbeddedAt != null).ToListAsync();
 var links = (await db.ItemLinks.AsNoTracking().ToListAsync()).ToLookup(l => l.TargetItemId);
 var storedVectors = await new SqliteVecStore(db).GetAsync(items.Select(i => i.Id));
+// Watched titles without a vector still count, as misses.
+var unembedded = (await db.Items.AsNoTracking().Where(i => i.EmbeddedAt == null).Select(i => new { i.Id, i.MediaType }).ToListAsync())
+    .Select(i => new EvaluationTarget(i.Id, i.MediaType, links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
+    .ToList();
 Console.WriteLine($"{plays.Count} plays, {items.Count} embedded titles, {storedVectors.Count} stored vectors\n");
 
 // Alternative embedding texts. "stored" is what the app embedded (the production document).
@@ -54,28 +58,15 @@ IEmbeddingGenerator<string, Embedding<float>>? generator = null;
 foreach (var (name, build) in documentVariants)
     vectorSets[name] = await LoadOrEmbedAsync(name, build);
 
-var defaults = new RecommendationOptions();
-List<(string Name, string Vectors, RecommendationOptions Options)> experiments =
-[
-    ("defaults (production)", "stored", defaults),
-    ("baseline: rating/popularity only", "stored", With(o => (o.SimilarityWeight, o.CollaborativeWeight, o.QualityWeight) = (0, 0, 1))),
-    ("similarity only", "stored", With(o => (o.SimilarityWeight, o.CollaborativeWeight, o.QualityWeight) = (1, 0, 0))),
-    ("tmdb links only", "stored", With(o => (o.SimilarityWeight, o.CollaborativeWeight, o.QualityWeight) = (0, 1, 0))),
-];
-foreach (var (s, c, q) in new[] { (0.4, 0.5, 0.1), (0.5, 0.4, 0.1), (0.7, 0.2, 0.1), (0.8, 0.1, 0.1), (0.5, 0.5, 0.0), (0.6, 0.4, 0.0), (0.5, 0.3, 0.2) })
-    experiments.Add(($"weights {s:0.0}/{c:0.0}/{q:0.0}", "stored", With(o => (o.SimilarityWeight, o.CollaborativeWeight, o.QualityWeight) = (s, c, q))));
-foreach (var days in new[] { 30.0, 180, 365, 100_000 })
-    experiments.Add(($"recency half-life {(days > 10_000 ? "off" : days + "d")}", "stored", With(o => o.RecencyHalfLifeDays = days)));
-foreach (var k in new[] { 1, 2, 6 })
-    experiments.Add(($"taste clusters max {k}", "stored", With(o => o.TasteClusters = k)));
-foreach (var w in new[] { 0.0, 1.0 })
-    experiments.Add(($"tmdb 'similar' link weight {w:0.0}", "stored", With(o => o.SimilarLinkWeight = w)));
-foreach (var l in new[] { 0.5, 0.85, 1.0 })
-    experiments.Add(($"diversity lambda {l:0.00}", "stored", With(o => o.DiversityLambda = l)));
+// The standard suite (shared with the admin dashboard), plus embedding-text variants that need their own vectors.
+List<(string Name, string Vectors, RecommendationOptions Options)> experiments = EvaluationExperiments
+    .Standard(new RecommendationOptions())
+    .Select(e => (e.Name, "stored", e.Options))
+    .ToList();
 foreach (var name in documentVariants.Keys)
-    experiments.Add(($"embedding text: {name}", name, defaults));
+    experiments.Add(($"embedding text: {name}", name, new RecommendationOptions()));
 
-Console.WriteLine($"{"experiment",-36} {"hits",8} {"hit@25",7} {"MRR",6} {"pct",6}   per profile (hits, mean percentile)");
+Console.WriteLine($"{"experiment",-36} {"hits",8} {"hit@25",7} {"MRR",6} {"pct",6} {"elig",5} {"link",5}   per profile (hits, mean percentile)");
 foreach (var (name, vectorsName, options) in experiments)
 {
     var vectors = vectorSets[vectorsName];
@@ -84,16 +75,9 @@ foreach (var (name, vectorsName, options) in experiments)
         .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount,
             links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
         .ToList();
-    var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, options);
+    var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, options, unembedded: unembedded);
     var perUser = string.Join(", ", result.Cases.GroupBy(c => c.UserId).Select(g => $"{g.Key} {g.Count(c => c.Rank is not null)}/{g.Count()} {g.Average(c => c.Percentile):P0}"));
-    Console.WriteLine($"{name,-36} {result.Hits,3}/{result.Cases.Count,-4} {result.HitRate,7:P0} {result.Mrr,6:0.000} {result.MeanPercentile,6:P1}   {perUser}");
-}
-
-RecommendationOptions With(Action<RecommendationOptions> change)
-{
-    var o = new RecommendationOptions();
-    change(o);
-    return o;
+    Console.WriteLine($"{name,-36} {result.Hits,3}/{result.Cases.Count,-4} {result.HitRate,7:P0} {result.Mrr,6:0.000} {result.MeanPercentile,6:P1} {result.EligibleShare,5:P0} {result.LinkedShare,5:P0}   {perUser}");
 }
 
 static string Document(ItemEntity i, bool title, bool cast) => EmbeddingDocument.Build(

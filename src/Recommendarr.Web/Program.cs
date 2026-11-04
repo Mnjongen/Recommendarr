@@ -37,6 +37,7 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
             options.KnownProxies.Add(IPAddress.Parse(address));
     });
 builder.Services.AddSingleton<SyncCoordinator>();
+builder.Services.AddSingleton<EvaluationCoordinator>();
 builder.Services.AddHostedService<SyncJob>();
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService<TelegramBotJob>();

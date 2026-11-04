@@ -23,52 +23,14 @@ public sealed class RecommendationService(
         var now = time.GetUtcNow();
 
         // The catalog is shared by every user, so load it (and its vectors) once.
-        var items = await db.Items.AsNoTracking()
-            .Where(i => i.EmbeddedAt != null)
-            .Select(i => new { i.Id, i.MediaType, i.Title, i.VoteAverage, i.VoteCount })
-            .ToListAsync(ct);
-        var vectors = await store.GetAsync(items.Select(i => i.Id), ct);
-        var titles = items.ToDictionary(i => i.Id, i => i.Title);
-        var links = (await db.ItemLinks.AsNoTracking().ToListAsync(ct)).ToLookup(l => l.TargetItemId);
-        var candidates = items
-            .Where(i => vectors.ContainsKey(i.Id))
-            .Select(i => new CandidateItem(
-                i.Id,
-                i.MediaType,
-                vectors[i.Id],
-                i.VoteAverage,
-                i.VoteCount,
-                links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
-            .ToList();
+        var catalog = await RecommendationInputs.LoadCatalogAsync(db, store, ct);
 
         var users = await db.Users.AsNoTracking().ToListAsync(ct);
         var total = 0;
         foreach (var user in users)
         {
-            var plays = await db.WatchEvents.AsNoTracking()
-                .Where(w => w.UserId == user.Id && w.ItemId != null)
-                .Select(w => new { ItemId = w.ItemId!.Value, w.WatchedAt, w.PercentComplete })
-                .ToListAsync(ct);
-            var signals = plays.Select(p => new PlaySignal(p.ItemId, p.WatchedAt, p.PercentComplete)).ToList();
-            var watched = TasteProfile.WeighItems(signals, vectors, now, o).ToList();
-
-            // Never recommend anything the user has started or explicitly rated.
-            var excluded = signals.Select(p => p.ItemId).ToHashSet();
-            var feedback = await db.Feedback.Where(f => f.UserId == user.Id).ToListAsync(ct);
-            excluded.UnionWith(feedback.Select(f => f.ItemId));
-
-            var watchedIds = watched.Select(w => w.ItemId).ToHashSet();
-            foreach (var like in feedback.Where(f => f.Kind == FeedbackKind.Like))
-            {
-                if (!watchedIds.Add(like.ItemId) || !vectors.TryGetValue(like.ItemId, out var vector))
-                    continue;
-
-                var ageDays = Math.Max(0, (now - like.CreatedAt).TotalDays);
-                var recency = Math.Max(o.MinRecencyWeight, Math.Pow(0.5, ageDays / o.RecencyHalfLifeDays));
-                watched.Add(new WatchedItem(like.ItemId, vector, o.LikedItemWeight * recency));
-            }
-
-            var recommendations = RecommendationEngine.Recommend(watched, candidates, excluded, o);
+            var (watched, excluded, _, _) = await RecommendationInputs.LoadUserAsync(db, user.Id, catalog.Vectors, now, o, ct);
+            var recommendations = RecommendationEngine.Recommend(watched, catalog.Candidates, excluded, o);
 
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             await db.Recommendations.Where(r => r.UserId == user.Id).ExecuteDeleteAsync(ct);
@@ -78,7 +40,7 @@ public sealed class RecommendationService(
                 ItemId = r.ItemId,
                 Rank = r.Rank,
                 Score = r.Score,
-                Reason = r.BecauseOfItemId is { } because && titles.TryGetValue(because, out var title) ? $"Because you watched {title}" : null,
+                Reason = r.BecauseOfItemId is { } because && catalog.Titles.TryGetValue(because, out var title) ? $"Because you watched {title.Title}" : null,
                 GeneratedAt = now,
             }));
             await db.SaveChangesAsync(ct);

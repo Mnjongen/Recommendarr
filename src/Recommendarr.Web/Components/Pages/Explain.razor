@@ -1,0 +1,282 @@
+@page "/admin/explain"
+@page "/admin/explain/{PlexUserId}"
+@attribute [Authorize(Policy = AuthConstants.AdminPolicy)]
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Recommendarr.Core.Recommendations
+@using Recommendarr.Infrastructure.Evaluation
+@using Recommendarr.Infrastructure.Sync
+@inject IServiceScopeFactory Scopes
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject CurrentAdminAuthorization AdminAuthorization
+@inject NavigationManager Navigation
+
+<PageTitle>Why this score · Recommendarr</PageTitle>
+
+<div class="page-header">
+    <h1>Why this score</h1>
+    @if (_users is not null)
+    {
+        <div class="controls">
+            <label>
+                Profile
+                <select value="@PlexUserId" @onchange="SelectProfile">
+                    <option value="">Pick a profile…</option>
+                    @foreach (var (id, name) in _users)
+                    {
+                        <option value="@id">@name</option>
+                    }
+                </select>
+            </label>
+        </div>
+    }
+</div>
+<nav class="subnav">
+    <a href="/admin">Admin</a>
+    <a href="/admin/quality">Recommendation quality</a>
+</nav>
+
+@if (!_isAdmin || PlexUserId is null)
+{
+    return;
+}
+
+@if (_loading)
+{
+    <p class="muted">Scoring the catalog…</p>
+}
+else if (_explanation is null)
+{
+    <p class="muted">Unknown profile.</p>
+}
+else
+{
+    var e = _explanation;
+    <section class="panel">
+        <h2>Settings</h2>
+        <p class="muted">
+            Scores are recomputed now from the current history and catalog, so they can differ slightly from the list
+            the last sync stored. Change the settings to see how @e.Username's ranking would move.
+        </p>
+        <details class="what-if">
+            <summary>What-if settings</summary>
+            <EngineSettingsEditor Value="_settings" />
+            <div class="actions">
+                <button class="button small" @onclick="RescoreAsync">Rescore</button>
+                <button class="button small" @onclick="ResetAsync">Reset to configured</button>
+            </div>
+        </details>
+    </section>
+
+    <section class="panel">
+        <h2>Taste clusters</h2>
+        <p class="muted">
+            @e.SeedWeights.Count weighted titles (watched or liked), grouped by k-means. Each candidate's similarity is
+            its cosine to the closest cluster. Weight = completion × recency × rewatches.
+        </p>
+        <div class="clusters">
+            @for (var i = 0; i < e.Explanation.Centroids.Count; i++)
+            {
+                var cluster = e.Explanation.Centroids[i];
+                <div class="cluster">
+                    <h3>Cluster @(i + 1) · @cluster.Share.ToString("P0") of taste · @cluster.ItemIds.Count titles</h3>
+                    <ol>
+                        @foreach (var id in cluster.ItemIds.OrderByDescending(id => e.SeedWeights.GetValueOrDefault(id)).Take(8))
+                        {
+                            <li>@TitleOf(id) <span class="weight">@e.SeedWeights.GetValueOrDefault(id).ToString("0.00")</span></li>
+                        }
+                    </ol>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div class="tabs">
+                <button class="@(_type == MediaType.Movie ? "active" : "")" @onclick="() => _type = MediaType.Movie">Movies (@PoolSize(MediaType.Movie))</button>
+                <button class="@(_type == MediaType.Tv ? "active" : "")" @onclick="() => _type = MediaType.Tv">TV shows (@PoolSize(MediaType.Tv))</button>
+            </div>
+            <div class="controls">
+                <label><input type="checkbox" @bind="_topOnly" /> Recommended only</label>
+                <input type="search" placeholder="Find a title…" @bind="_search" @bind:event="oninput" />
+            </div>
+        </div>
+
+        <div class="legend">
+            <span style="--swatch: var(--series-1)">Similarity × @_settings.SimilarityWeight</span>
+            <span style="--swatch: var(--series-2)">Collaborative × @_settings.CollaborativeWeight</span>
+            <span style="--swatch: var(--series-3)">Quality × @_settings.QualityWeight</span>
+        </div>
+
+        @foreach (var (id, reason) in NotScored())
+        {
+            <div class="why-not"><strong>@TitleOf(id)</strong> isn't scored: @reason</div>
+        }
+
+        <table>
+            <thead>
+                <tr>
+                    <th class="num" title="Position after diversification (MMR)">Rank</th>
+                    <th class="num" title="Position by score alone">Score rank</th>
+                    <th>Title</th>
+                    <th class="num">Score</th>
+                    <th>Contribution</th>
+                    <th class="num" title="Normalised (raw cosine to the closest cluster)">Similarity</th>
+                    <th class="num" title="Normalised (raw log(1 + Σ seed link strength))">Collaborative</th>
+                    <th class="num" title="Normalised (raw Bayesian-average rating)">Quality</th>
+                    <th class="num">Cluster</th>
+                    <th>Because of</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Rows())
+                {
+                    var t = e.Titles.GetValueOrDefault(row.ItemId);
+                    <tr class="selectable @(_expanded == row.ItemId ? "selected" : "")" @onclick="() => Toggle(row.ItemId)">
+                        <td class="num">@(row.Rank?.ToString() ?? "–")</td>
+                        <td class="num">@row.ScoreRank</td>
+                        <td>
+                            <button type="button" class="row-toggle" aria-expanded="@(_expanded == row.ItemId ? "true" : "false")"
+                                    @onclick="() => Toggle(row.ItemId)" @onclick:stopPropagation>
+                                @(t?.Title ?? $"#{row.ItemId}") <span class="muted">@(t?.Year is { } y ? $"({y})" : "")</span>
+                            </button>
+                            @if (_expanded == row.ItemId)
+                            {
+                                <ul class="seed-list">
+                                    <li>★ @t?.VoteAverage.ToString("0.0") from @t?.VoteCount votes</li>
+                                    @if (row.Seeds.Count == 0)
+                                    {
+                                        <li>No TMDB link from anything this profile watched.</li>
+                                    }
+                                    @foreach (var seed in row.Seeds.OrderByDescending(s => s.Strength))
+                                    {
+                                        <li>@TitleOf(seed.SeedItemId): @(seed.Collaborative ? "recommends" : "similar to") it, strength @seed.Strength.ToString("0.00")</li>
+                                    }
+                                </ul>
+                            }
+                        </td>
+                        <td class="num">@row.Score.ToString("0.000")</td>
+                        <td><ScoreBar Breakdown="row" Options="e.Options" /></td>
+                        <td class="num">@row.Similarity.ToString("0.00") <span class="muted">(@row.RawSimilarity.ToString("0.000"))</span></td>
+                        <td class="num">@row.Collaborative.ToString("0.00") <span class="muted">(@row.RawCollaborative.ToString("0.00"))</span></td>
+                        <td class="num">@row.Quality.ToString("0.00") <span class="muted">(@row.RawQuality.ToString("0.00"))</span></td>
+                        <td class="num">@(row.Centroid + 1)</td>
+                        <td>@(row.BecauseOfItemId is { } because ? TitleOf(because) : "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (!_topOnly && string.IsNullOrWhiteSpace(_search) && PoolSize(_type) > MaxRows)
+        {
+            <p class="muted">Showing the top @MaxRows of @PoolSize(_type) by score. Search to find any other title.</p>
+        }
+    </section>
+}
+
+@code {
+    private const int MaxRows = 150;
+
+    [Parameter] public string? PlexUserId { get; set; }
+
+    private bool _isAdmin;
+    private bool _loading;
+    private List<(string Id, string Name)>? _users;
+    private CatalogSnapshot? _catalog;
+    private UserExplanation? _explanation;
+    private RecommendationOptions _configured = new();
+    private RecommendationOptions _settings = new();
+    private MediaType _type = MediaType.Movie;
+    private bool _topOnly = true;
+    private string _search = "";
+    private int? _expanded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = await AdminAuthorization.IsAdminAsync(authenticationState.User);
+        if (!_isAdmin)
+            return;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>();
+        _users = (await db.Users.AsNoTracking().OrderBy(u => u.Username).Select(u => new { u.PlexUserId, u.Username }).ToListAsync())
+            .Select(u => (u.PlexUserId, u.Username))
+            .ToList();
+        _configured = scope.ServiceProvider.GetRequiredService<RecommendationQualityService>().ConfiguredOptions.Clone();
+        _settings = _configured.Clone();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _expanded = null;
+        _search = "";
+        await ScoreAsync();
+    }
+
+    private void SelectProfile(ChangeEventArgs e) => Navigation.NavigateTo($"/admin/explain/{e.Value}");
+
+    private Task RescoreAsync() => ScoreAsync();
+
+    private Task ResetAsync()
+    {
+        _settings = _configured.Clone();
+        return ScoreAsync();
+    }
+
+    private async Task ScoreAsync()
+    {
+        if (!_isAdmin || PlexUserId is null)
+            return;
+
+        // Re-check on every rescore: the admin flag can be revoked while the circuit is open.
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!await AdminAuthorization.IsAdminAsync(authenticationState.User))
+        {
+            (_isAdmin, _users, _catalog, _explanation) = (false, null, null, null);
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var quality = scope.ServiceProvider.GetRequiredService<RecommendationQualityService>();
+            // The catalog is the expensive part; keep it while the admin flips settings or profiles.
+            _catalog ??= await quality.LoadCatalogAsync();
+            _explanation = await quality.ExplainAsync(_catalog, PlexUserId, _settings.Clone());
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Toggle(int itemId) => _expanded = _expanded == itemId ? null : itemId;
+
+    private int PoolSize(MediaType type) => _explanation?.Explanation.Candidates.Count(c => c.MediaType == type) ?? 0;
+
+    private IEnumerable<ScoreBreakdown> Rows()
+    {
+        var rows = _explanation!.Explanation.Candidates.Where(c => c.MediaType == _type);
+        if (!string.IsNullOrWhiteSpace(_search))
+            return rows.Where(c => TitleOf(c.ItemId).Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase)).Take(MaxRows);
+        return _topOnly ? rows.Where(c => c.Rank is not null).OrderBy(c => c.Rank) : rows.Take(MaxRows);
+    }
+
+    /// <summary>Catalog titles matching the search that the engine didn't score, with the reason.</summary>
+    private IEnumerable<(int Id, string Reason)> NotScored()
+    {
+        if (_explanation is not { } e || string.IsNullOrWhiteSpace(_search) || _search.Trim().Length < 2)
+            return [];
+        return e.Titles.Values
+            .Where(t => t.MediaType == _type && t.Title.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Select(t => (t.Id, Reason: e.WhyNotScored(t.Id)))
+            .Where(x => x.Reason is not null)
+            .Take(5)
+            .Select(x => (x.Id, x.Reason!));
+    }
+
+    private string TitleOf(int itemId) =>
+        _explanation?.Titles.GetValueOrDefault(itemId) is { } t ? t.Year is { } y ? $"{t.Title} ({y})" : t.Title : $"#{itemId}";
+}

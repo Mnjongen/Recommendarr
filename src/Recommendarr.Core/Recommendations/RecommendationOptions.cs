@@ -42,4 +42,7 @@ public sealed class RecommendationOptions
     public double MinVoteAverage { get; set; } = 5.5;
 
     public int MinVoteCount { get; set; } = 50;
+
+    /// <summary>A copy to change for a what-if experiment without touching the configured options.</summary>
+    public RecommendationOptions Clone() => (RecommendationOptions)MemberwiseClone();
 }

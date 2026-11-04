@@ -1,0 +1,285 @@
+@page "/admin/quality"
+@attribute [Authorize(Policy = AuthConstants.AdminPolicy)]
+@rendermode InteractiveServer
+@implements IDisposable
+@using Recommendarr.Core.Recommendations
+@using Recommendarr.Infrastructure.Evaluation
+@inject IServiceScopeFactory Scopes
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject CurrentAdminAuthorization AdminAuthorization
+@inject EvaluationCoordinator Evaluation
+
+<PageTitle>Recommendation quality · Recommendarr</PageTitle>
+
+<h1>Recommendation quality</h1>
+<nav class="subnav">
+    <a href="/admin">Admin</a>
+    <a href="/admin/explain">Why this score</a>
+</nav>
+
+@if (!_isAdmin)
+{
+    return;
+}
+
+<section class="panel">
+    <h2>Catalog</h2>
+    <p class="muted">What the engine can choose from. Only embedded titles that pass the vote filters can be recommended.</p>
+    @if (_catalog is { } c)
+    {
+        <div class="stats">
+            <div class="stat"><div class="value">@c.EmbeddedMovies</div><div class="label">Movies embedded</div><div class="detail">@c.EligibleMovies pass the vote filters</div></div>
+            <div class="stat"><div class="value">@c.EmbeddedShows</div><div class="label">Shows embedded</div><div class="detail">@c.EligibleShows pass the vote filters</div></div>
+            <div class="stat"><div class="value">@(c.RecommendationLinks + c.SimilarLinks)</div><div class="label">TMDB links</div><div class="detail">@c.RecommendationLinks recommendations, @c.SimilarLinks similar</div></div>
+            <div class="stat"><div class="value">@c.UnlinkedTitles</div><div class="label">Unlinked candidates</div><div class="detail">from trending lists only, no collaborative signal</div></div>
+            <div class="stat"><div class="value">@c.NotEmbedded</div><div class="label">Waiting for embedding</div><div class="detail">no metadata or vector yet</div></div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Profile</th><th class="num">Plays</th><th class="num">Unresolved plays</th><th class="num">Watched titles</th>
+                    <th class="num">Not embedded</th><th class="num">Recommendations</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var user in c.Users)
+                {
+                    <tr>
+                        <td>@user.Username</td>
+                        <td class="num">@user.Plays</td>
+                        <td class="num" title="Plays without a TMDB id don't shape the profile's taste">@user.UnresolvedPlays</td>
+                        <td class="num">@user.WatchedTitles</td>
+                        <td class="num">@user.UnembeddedTitles</td>
+                        <td class="num">@user.Recommendations</td>
+                        <td><a href="/admin/explain/@user.PlexUserId">Why this score</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2>Offline evaluation</h2>
+    </div>
+    <p class="muted">
+        For every title a profile watched, rewind to just before its first play, recommend from the earlier history
+        only, and check where the title ranked. Use it to compare settings; absolute numbers are optimistic because the
+        candidate pool is today's catalog.
+    </p>
+    <div class="actions">
+        <button class="button" disabled="@Evaluation.IsRunning" @onclick="() => Start(Current())">Evaluate current settings</button>
+        <button class="button" disabled="@Evaluation.IsRunning" @onclick="() => Start(EvaluationExperiments.Standard(_configured))">Run experiment suite (@EvaluationExperiments.Standard(_configured).Count)</button>
+        @if (Evaluation.IsRunning)
+        {
+            <button class="button small" @onclick="Evaluation.Cancel">Cancel</button>
+            <span class="muted">@Evaluation.Progress</span>
+        }
+        else if (Evaluation.LastError is { } error)
+        {
+            <span class="alert">@error</span>
+        }
+    </div>
+    <details class="what-if">
+        <summary>What-if settings</summary>
+        <EngineSettingsEditor Value="_whatIf" />
+        <div class="actions">
+            <button class="button small" disabled="@Evaluation.IsRunning" @onclick="StartWhatIf">Evaluate against current settings</button>
+            <button class="button small" @onclick="() => _whatIf = _configured.Clone()">Reset</button>
+        </div>
+    </details>
+
+    @if (Evaluation.LastReport is { } report)
+    {
+        var baseline = report.Results.FirstOrDefault(r => r.Experiment.Name == EvaluationExperiments.BaselineName)?.Result;
+        <p class="muted">
+            Run of @report.StartedAt.ToLocalTime().ToString("g") over @report.CatalogTitles titles, took @report.Duration.TotalSeconds.ToString("0")s.
+            Select a row for its breakdown.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Experiment</th><th class="num">Cases</th><th class="num">Hit@@@report.Results[0].Result.K</th><th class="num">MRR</th>
+                    <th class="num">Mean percentile</th><th class="num">vs current</th><th class="num">Eligible</th><th class="num">Linked</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in report.Results)
+                {
+                    var r = row.Result;
+                    var delta = baseline is null ? (double?)null : r.MeanPercentile - baseline.MeanPercentile;
+                    <tr class="selectable @(row == Selected(report) ? "selected" : "")" @onclick="() => _selected = row.Experiment.Name">
+                        <td>
+                            <button type="button" class="row-toggle" aria-pressed="@(row == Selected(report) ? "true" : "false")"
+                                    @onclick="() => _selected = row.Experiment.Name" @onclick:stopPropagation>@row.Experiment.Name</button>
+                        </td>
+                        <td class="num">@r.Cases.Count</td>
+                        <td class="num">@r.HitRate.ToString("P1")</td>
+                        <td class="num">@r.Mrr.ToString("0.000")</td>
+                        <td class="num">@r.MeanPercentile.ToString("P1")</td>
+                        <td class="num @(delta < -0.001 ? "better" : delta > 0.001 ? "worse" : "")">@(delta is { } d && row.Result != baseline ? $"{(d < 0 ? "▼" : "▲")} {Math.Abs(d):P1}" : "")</td>
+                        <td class="num">@r.EligibleShare.ToString("P0")</td>
+                        <td class="num">@r.LinkedShare.ToString("P0")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <dl class="definitions">
+            <dt>Hit@@K</dt><dd>Share of watched titles that were in the top K of their type just before they were watched.</dd>
+            <dt>MRR</dt><dd>Mean reciprocal rank: rewards hits near the top of the list.</dd>
+            <dt>Mean percentile</dt><dd>Where the watched title sat among all candidates by score. Lower is better, random is 50%. The most stable metric for comparisons; ▼ means better than the current settings.</dd>
+            <dt>Eligible</dt><dd>Share of watched titles that were embedded and passed the vote filters. Anything else can never be recommended.</dd>
+            <dt>Linked</dt><dd>Share reachable through TMDB links from earlier watches. A low value means catalog expansion from history misses what people actually watch next.</dd>
+        </dl>
+
+        @if (Selected(report) is { } selected)
+        {
+            <h2 style="margin-top: 1.5rem">@selected.Experiment.Name</h2>
+            <table>
+                <thead>
+                    <tr><th>Segment</th><th class="num">Cases</th><th class="num">Hits</th><th class="num">MRR</th><th class="num">Mean percentile</th><th class="num">Eligible</th><th class="num">Linked</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var (segment, r) in Segments(report, selected.Result))
+                    {
+                        <tr>
+                            <td>@segment</td>
+                            <td class="num">@r.Cases.Count</td>
+                            <td class="num">@r.Hits (@r.HitRate.ToString("P0"))</td>
+                            <td class="num">@r.Mrr.ToString("0.000")</td>
+                            <td class="num">@r.MeanPercentile.ToString("P1")</td>
+                            <td class="num">@r.EligibleShare.ToString("P0")</td>
+                            <td class="num">@r.LinkedShare.ToString("P0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <h2 style="margin-top: 1.5rem">Hardest to predict</h2>
+            <p class="muted">Watched titles the engine ranked lowest. Ineligible ones show what the vote filters throw away; unlinked ones show gaps in catalog expansion.</p>
+            <table>
+                <thead>
+                    <tr><th>Title</th><th>Profile</th><th>Watched</th><th class="num">History</th><th class="num">Percentile</th><th>Eligible</th><th>Linked</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var miss in selected.Result.Cases.OrderByDescending(x => x.Percentile).ThenByDescending(x => x.WatchedAt).Take(25))
+                    {
+                        var title = report.Titles.GetValueOrDefault(miss.ItemId);
+                        <tr>
+                            <td>@(title?.Title ?? $"#{miss.ItemId}") <span class="muted">@(title?.Year is { } y ? $"({y})" : "")</span></td>
+                            <td>@report.Usernames.GetValueOrDefault(miss.UserId, miss.UserId)</td>
+                            <td>@miss.WatchedAt.ToLocalTime().ToString("d")</td>
+                            <td class="num">@miss.TrainingTitles</td>
+                            <td class="num">@miss.Percentile.ToString("P0")</td>
+                            <td>@(miss.Eligible ? "yes" : !miss.Embedded ? "no (not embedded yet)" : $"no ({title?.VoteCount} votes, ★ {title?.VoteAverage:0.0})")</td>
+                            <td>@(miss.Linked ? "yes" : "no")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</section>
+
+<section class="panel">
+    <h2>History</h2>
+    <p class="muted">Earlier evaluations of the current settings, so you can see whether a bigger catalog or a tuning change helped.</p>
+    @if (_history is { Count: > 0 })
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Run</th><th class="num">Catalog titles</th><th class="num">Profiles</th><th class="num">Cases</th><th class="num">Hit@@K</th>
+                    <th class="num">MRR</th><th class="num">Mean percentile</th><th class="num">Eligible</th><th class="num">Linked</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var run in _history)
+                {
+                    <tr>
+                        <td>@run.StartedAt.ToLocalTime().ToString("g")</td>
+                        <td class="num">@run.CatalogTitles</td>
+                        <td class="num">@run.Users</td>
+                        <td class="num">@run.Cases</td>
+                        <td class="num">@run.HitRate.ToString("P1") <span class="muted">@@@run.K</span></td>
+                        <td class="num">@run.Mrr.ToString("0.000")</td>
+                        <td class="num">@run.MeanPercentile.ToString("P1")</td>
+                        <td class="num">@run.EligibleShare.ToString("P0")</td>
+                        <td class="num">@run.LinkedShare.ToString("P0")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p class="muted">No evaluations yet.</p>
+    }
+</section>
+
+@code {
+    private bool _isAdmin;
+    private CatalogStats? _catalog;
+    private List<EvaluationRunEntity>? _history;
+    private RecommendationOptions _configured = new();
+    private RecommendationOptions _whatIf = new();
+    private string? _selected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Evaluation.StateChanged += OnEvaluationChanged;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = await AdminAuthorization.IsAdminAsync(authenticationState.User);
+        if (!_isAdmin)
+            return;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var quality = scope.ServiceProvider.GetRequiredService<RecommendationQualityService>();
+        _configured = quality.ConfiguredOptions.Clone();
+        _whatIf = _configured.Clone();
+        _catalog = await quality.GetCatalogStatsAsync();
+        _history = await quality.GetHistoryAsync();
+    }
+
+    private IReadOnlyList<EvaluationExperiment> Current() => [new(EvaluationExperiments.BaselineName, _configured.Clone())];
+
+    private Task StartWhatIf() => Start([.. Current(), new EvaluationExperiment("what-if", _whatIf.Clone())]);
+
+    private async Task Start(IReadOnlyList<EvaluationExperiment> experiments)
+    {
+        // Re-check: the admin flag can be revoked while the page is open.
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!await AdminAuthorization.IsAdminAsync(authenticationState.User))
+            return;
+        _selected = null;
+        Evaluation.TryStart(experiments);
+    }
+
+    private ExperimentResult? Selected(EvaluationReport report) =>
+        report.Results.FirstOrDefault(r => r.Experiment.Name == _selected) ?? report.Results.FirstOrDefault();
+
+    private static IEnumerable<(string Segment, EvaluationResult Result)> Segments(EvaluationReport report, EvaluationResult result)
+    {
+        yield return ("Movies", result.Where(c => c.MediaType == MediaType.Movie));
+        yield return ("TV shows", result.Where(c => c.MediaType == MediaType.Tv));
+        foreach (var user in result.Cases.Select(c => c.UserId).Distinct().OrderBy(u => report.Usernames.GetValueOrDefault(u, u)))
+            yield return (report.Usernames.GetValueOrDefault(user, user), result.Where(c => c.UserId == user));
+        // Does the engine get better as it learns more about someone?
+        yield return ("History 3–9 titles", result.Where(c => c.TrainingTitles < 10));
+        yield return ("History 10–49 titles", result.Where(c => c.TrainingTitles is >= 10 and < 50));
+        yield return ("History 50+ titles", result.Where(c => c.TrainingTitles >= 50));
+    }
+
+    private void OnEvaluationChanged() => _ = InvokeAsync(async () =>
+    {
+        if (!Evaluation.IsRunning && _isAdmin)
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            _history = await scope.ServiceProvider.GetRequiredService<RecommendationQualityService>().GetHistoryAsync();
+        }
+        StateHasChanged();
+    });
+
+    public void Dispose() => Evaluation.StateChanged -= OnEvaluationChanged;
+}

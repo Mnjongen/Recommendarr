@@ -24,6 +24,36 @@ public sealed record ScoredRecommendation(
     double Quality,
     int? BecauseOfItemId);
 
+/// <summary>A watched title that links to a candidate, and how much that link added to its collaborative signal.</summary>
+public sealed record SeedContribution(int SeedItemId, bool Collaborative, double Strength);
+
+/// <summary>
+/// Everything that went into one candidate's score, for debugging and tuning. Normalised components are
+/// min-max scaled across the user's whole pool (movies and shows together). The raw values are the cosine
+/// similarity to the closest taste centroid, <c>log(1 + Σ link strength)</c>, and the Bayesian-average rating.
+/// </summary>
+/// <param name="ScoreRank">Position by score among candidates of the same media type, before diversification.</param>
+/// <param name="Rank">Final position after MMR diversification; null when it didn't make the list.</param>
+/// <param name="Centroid">Index into <see cref="RecommendationExplanation.Centroids"/> of the closest taste cluster.</param>
+public sealed record ScoreBreakdown(
+    int ItemId,
+    MediaType MediaType,
+    int ScoreRank,
+    int? Rank,
+    double Score,
+    double Similarity,
+    double Collaborative,
+    double Quality,
+    double RawSimilarity,
+    double RawCollaborative,
+    double RawQuality,
+    int Centroid,
+    IReadOnlyList<SeedContribution> Seeds,
+    int? BecauseOfItemId);
+
+/// <summary>The user's taste clusters and the breakdown of every eligible candidate, best score first per media type.</summary>
+public sealed record RecommendationExplanation(IReadOnlyList<TasteCentroid> Centroids, IReadOnlyList<ScoreBreakdown> Candidates);
+
 /// <summary>
 /// Pure scoring pipeline (steps 5–7): taste centroids → score every candidate as
 /// <c>a·similarity + b·collaborative + c·quality</c> → MMR re-ranking for variety, per media type.
@@ -50,9 +80,46 @@ public static class RecommendationEngine
                     s.Candidate.ItemId, g.Key, i + 1, s.Score, s.Similarity, s.Collaborative, s.Quality, s.BecauseOf)))
             .ToList();
 
+    /// <summary>
+    /// Same pipeline as <see cref="Recommend"/>, but returns the components of every eligible candidate
+    /// (not just the top list) together with the taste clusters they were scored against.
+    /// </summary>
+    public static RecommendationExplanation Explain(
+        IReadOnlyList<WatchedItem> watched,
+        IReadOnlyList<CandidateItem> candidates,
+        IReadOnlySet<int> excluded,
+        RecommendationOptions o)
+    {
+        var centroids = TasteProfile.Cluster(watched, o);
+        var breakdowns = Score(watched, centroids, candidates, excluded, o)
+            .GroupBy(s => s.Candidate.MediaType)
+            .OrderBy(g => g.Key)
+            .SelectMany(g =>
+            {
+                var ranks = Diversify(g.ToList(), o)
+                    .Select((s, i) => (s.Candidate.ItemId, Rank: i + 1))
+                    .ToDictionary(x => x.ItemId, x => x.Rank);
+                return g.OrderByDescending(s => s.Score).Select((s, i) => new ScoreBreakdown(
+                    s.Candidate.ItemId, g.Key, i + 1, ranks.TryGetValue(s.Candidate.ItemId, out var rank) ? rank : null,
+                    s.Score, s.Similarity, s.Collaborative, s.Quality,
+                    s.RawSimilarity, s.RawCollaborative, s.RawQuality,
+                    s.Centroid, s.Seeds, s.BecauseOf));
+            })
+            .ToList();
+        return new RecommendationExplanation(centroids, breakdowns);
+    }
+
     /// <summary>Scores every eligible candidate (before diversification); the evaluator ranks the whole pool.</summary>
     internal static List<Scored> Score(
         IReadOnlyList<WatchedItem> watched,
+        IReadOnlyList<CandidateItem> candidates,
+        IReadOnlySet<int> excluded,
+        RecommendationOptions o) =>
+        watched.Count == 0 ? [] : Score(watched, TasteProfile.Cluster(watched, o), candidates, excluded, o);
+
+    private static List<Scored> Score(
+        IReadOnlyList<WatchedItem> watched,
+        IReadOnlyList<TasteCentroid> centroids,
         IReadOnlyList<CandidateItem> candidates,
         IReadOnlySet<int> excluded,
         RecommendationOptions o)
@@ -60,7 +127,6 @@ public static class RecommendationEngine
         if (watched.Count == 0)
             return [];
 
-        var centroids = TasteProfile.Cluster(watched, o);
         var seedWeights = watched.ToDictionary(w => w.ItemId, w => w.Weight);
         var watchedVectors = watched.Select(w => (w.ItemId, Vector: VectorMath.Normalize(w.Vector))).ToList();
 
@@ -74,22 +140,33 @@ public static class RecommendationEngine
 
         foreach (var s in pool)
         {
-            s.Similarity = centroids.Max(t => VectorMath.Cosine(t.Vector, s.Vector));
+            s.Similarity = double.NegativeInfinity;
+            for (var c = 0; c < centroids.Count; c++)
+            {
+                var cosine = VectorMath.Cosine(centroids[c].Vector, s.Vector);
+                if (cosine > s.Similarity)
+                    (s.Similarity, s.Centroid) = (cosine, c);
+            }
 
             double collaborative = 0, strongest = 0;
+            List<SeedContribution>? seeds = null;
             foreach (var link in s.Candidate.Links)
             {
                 if (!seedWeights.TryGetValue(link.SeedItemId, out var seedWeight))
                     continue;
                 var strength = seedWeight * (link.Collaborative ? 1 : o.SimilarLinkWeight);
                 collaborative += strength;
+                (seeds ??= []).Add(new SeedContribution(link.SeedItemId, link.Collaborative, strength));
                 if (strength > strongest)
                     (strongest, s.BecauseOf) = (strength, link.SeedItemId);
             }
             s.Collaborative = Math.Log(1 + collaborative);
+            if (seeds is not null)
+                s.Seeds = seeds;
 
             var v = s.Candidate.VoteCount;
             s.Quality = (v * s.Candidate.VoteAverage + QualityPriorVotes * QualityPriorMean) / (v + QualityPriorVotes);
+            (s.RawSimilarity, s.RawCollaborative, s.RawQuality) = (s.Similarity, s.Collaborative, s.Quality);
 
             // Without a TMDB link, explain the pick by the closest thing the user watched.
             s.BecauseOf ??= watchedVectors.MaxBy(w => VectorMath.Cosine(w.Vector, s.Vector)).ItemId;
@@ -107,7 +184,7 @@ public static class RecommendationEngine
     /// Maximal marginal relevance: repeatedly take the candidate with the best
     /// <c>λ·score − (1−λ)·max similarity to what's already picked</c>, so the list isn't five sequels.
     /// </summary>
-    private static List<Scored> Diversify(List<Scored> group, RecommendationOptions o)
+    internal static List<Scored> Diversify(List<Scored> group, RecommendationOptions o)
     {
         var remaining = group.OrderByDescending(s => s.Score).Take(o.ResultsPerType * MmrPoolFactor).ToList();
         var picked = new List<Scored>(o.ResultsPerType);
@@ -150,6 +227,11 @@ public static class RecommendationEngine
         public double Collaborative { get; set; }
         public double Quality { get; set; }
         public double Score { get; set; }
+        public double RawSimilarity { get; set; }
+        public double RawCollaborative { get; set; }
+        public double RawQuality { get; set; }
+        public int Centroid { get; set; }
+        public IReadOnlyList<SeedContribution> Seeds { get; set; } = [];
         public int? BecauseOf { get; set; }
     }
 }

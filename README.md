@@ -53,6 +53,14 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 ## Signing in
 Open the web UI and choose **Sign in with Plex**. If several people share one Plex login through Plex Home, Recommendarr then asks **Who's watching?** and requires the profile PIN when one is set. Only profiles that use this server can sign in. The server owner's profile is the admin: they can see everyone's recommendations, start a sync, and choose the Seerr account for each profile.
 
+## Tuning recommendations
+Admins get two extra pages for improving the engine:
+
+- **Quality** (`/admin/quality`) shows what the catalog holds (embedded titles, how many pass the vote filters, TMDB links, unresolved plays per profile). It also runs an offline "next watch" evaluation: for every title a profile watched, it recommends from the earlier history only and records where that title ranked. Evaluate the current settings, a what-if variant, or the full experiment suite (one knob changed at a time). Each run's metrics are stored, so the history table shows whether a bigger catalog or a tuning change helped. *Eligible* is the share of watched titles that passed the vote filters. *Linked* is the share reachable through TMDB links from earlier watches; a low value means catalog expansion misses what people actually watch next.
+- **Why this score** (`/admin/explain/{plexUserId}`) shows a profile's taste clusters and, for every candidate, the similarity, collaborative and quality components (normalised and raw), the weighted contribution of each, its rank before and after diversification, and which watched titles link to it. Search for a title to see why it isn't scored (already watched, feedback, too few votes, not embedded). What-if settings rescore the profile without saving anything.
+
+The same evaluation runs from the command line, with extra embedding-text experiments: `dotnet run --project tools/Recommendarr.Eval -- [data-directory]`.
+
 ## Telegram Bot
 Set `Recommendarr__Telegram__BotToken` to a token from BotFather and restart the app. The bot uses long polling, so no public webhook endpoint is required. Pair only in a private Telegram chat:
 

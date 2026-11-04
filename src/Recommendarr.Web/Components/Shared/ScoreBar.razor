@@ -1,0 +1,23 @@
+@using System.Globalization
+@using Recommendarr.Core.Recommendations
+
+@* Weighted contribution of each component to the score; the full width is a score of 1. *@
+<div class="score-bar" role="img" aria-label="@Label">
+    <span class="similarity" style="width: @Percent(Options.SimilarityWeight * Breakdown.Similarity)" title="Similarity @Format(Options.SimilarityWeight * Breakdown.Similarity)"></span>
+    <span class="collaborative" style="width: @Percent(Options.CollaborativeWeight * Breakdown.Collaborative)" title="Collaborative @Format(Options.CollaborativeWeight * Breakdown.Collaborative)"></span>
+    <span class="quality" style="width: @Percent(Options.QualityWeight * Breakdown.Quality)" title="Quality @Format(Options.QualityWeight * Breakdown.Quality)"></span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ScoreBreakdown Breakdown { get; set; } = null!;
+    [Parameter, EditorRequired] public RecommendationOptions Options { get; set; } = null!;
+
+    private double Total => Math.Max(1, Options.SimilarityWeight + Options.CollaborativeWeight + Options.QualityWeight);
+
+    private string Label =>
+        $"Similarity {Format(Options.SimilarityWeight * Breakdown.Similarity)}, collaborative {Format(Options.CollaborativeWeight * Breakdown.Collaborative)}, quality {Format(Options.QualityWeight * Breakdown.Quality)}";
+
+    private string Percent(double contribution) => (100 * Math.Max(0, contribution) / Total).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+
+    private static string Format(double value) => value.ToString("0.000", CultureInfo.InvariantCulture);
+}
