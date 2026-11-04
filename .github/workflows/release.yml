@@ -8,24 +8,20 @@ on:
     tags: ['v*.*.*']
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-      - run: dotnet tool restore
-      - run: dotnet build -c Release
-      - run: dotnet test -c Release --no-build
+  tests:
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
 
   release:
-    needs: test
+    needs: tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
 

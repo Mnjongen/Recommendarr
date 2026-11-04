@@ -6,7 +6,7 @@ export default defineConfig({
   forbidOnly: true,
   retries: 0,
   workers: 1,
-  reporter: 'html',
+  reporter: [['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:5197',
     trace: 'on-first-retry',
@@ -18,15 +18,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'dotnet run --no-launch-profile --project src/Recommendarr.Web/Recommendarr.Web.csproj',
-    url: 'http://127.0.0.1:5197/api/v1/health',
+    command: 'dotnet run -c Release --no-launch-profile --project tests/Recommendarr.Web.E2EHost/Recommendarr.Web.E2EHost.csproj',
+    url: 'http://127.0.0.1:5197/__e2e/health',
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
-      ASPNETCORE_ENVIRONMENT: 'Testing',
+      ASPNETCORE_ENVIRONMENT: 'Development',
       ASPNETCORE_URLS: 'http://127.0.0.1:5197',
-      Recommendarr__Storage__DataDirectory: '.playwright-data',
-      Recommendarr__Sync__RunOnStartup: 'false',
     },
   },
 });

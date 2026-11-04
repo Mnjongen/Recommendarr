@@ -93,7 +93,7 @@ npx playwright install firefox  # once per machine
 npm run test:e2e
 npm run test:e2e:report
 ```
-The report command binds to IPv4 loopback so it works when `localhost` resolves to IPv6. Current browser coverage is a sign-in-page smoke test; expand it as UI workflows are added, using isolated test data and test-only authentication for signed-in flows.
+The report command binds to IPv4 loopback so it works when `localhost` resolves to IPv6. Playwright starts the test-only host in `tests/Recommendarr.Web.E2EHost`, with isolated seeded SQLite data, deterministic fake integrations, and a loopback-only test sign-in route. It covers public sign-in/error/redirect/not-found states plus signed-in recommendations, search, feedback, requests, admin, and Telegram settings. The test sign-in route is not part of the production web host, and browser tests do not call live Plex, TMDB, Seerr, or Telegram services.
 
 ## Releasing
 Releases come from version tags, not from every commit. Pushing a tag runs the tests, publishes the Docker image, and creates a GitHub release with generated notes:
