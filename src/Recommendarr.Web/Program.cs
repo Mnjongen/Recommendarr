@@ -134,6 +134,17 @@ app.MapAuthEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+app.MapFallback(async context =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    context.Response.Redirect("/not-found");
+});
+
 app.Run();
 
 static Task RedirectOrStatus(Microsoft.AspNetCore.Authentication.RedirectContext<CookieAuthenticationOptions> ctx, int status)

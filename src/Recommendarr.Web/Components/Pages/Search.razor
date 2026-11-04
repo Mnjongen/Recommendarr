@@ -9,7 +9,7 @@
     <h1>Search titles</h1>
 </div>
 
-<form class="search-form" @onsubmit="SearchAsync">
+<form class="search-form" @onsubmit="SearchAsync" @onsubmit:preventDefault="true">
     <input type="search" name="q" placeholder="Search movies and TV shows to like…" aria-label="Search movies and TV shows" @bind="_query" @bind:event="oninput" />
     <button type="submit" class="button" disabled="@_searching">@(_searching ? "Searching…" : "Search")</button>
 </form>

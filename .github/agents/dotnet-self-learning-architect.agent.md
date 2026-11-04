@@ -31,7 +31,7 @@ Read `CLAUDE.md` and `README.md` before non-trivial work; they are the source of
 - Seerr POSTs are never retried. Requests are made as the end user via `X-Api-User`.
 - Never commit secrets; local keys go in `appsettings.Local.json` (git-ignored). The repo is public.
 - Tests are xUnit v2 (`IAsyncLifetime` returns `Task`).
-- When a UI workflow changes, add or update focused Playwright coverage. Grow beyond the current sign-in smoke test toward profile selection, recommendations, feedback and requests, and admin workflows. Use deterministic data and keep any test authentication and service fakes confined to test hosts; never add a production test-auth shortcut or call real Plex/TMDB/Seerr from browser tests.
+- When a UI workflow changes, add or update focused Playwright coverage. The E2E host now covers profile selection, recommendations, feedback and requests, and admin workflows; extend it for new browser-visible features. Use deterministic data and keep test authentication and service fakes confined to the E2E/test hosts; never add a production test-auth shortcut or call real Plex/TMDB/Seerr/Telegram from browser tests.
 
 ## Common Commands
 
@@ -43,7 +43,7 @@ dotnet run --project src/Recommendarr.Web
 dotnet ef migrations add <Name> -p src/Recommendarr.Infrastructure -s src/Recommendarr.Web -o Data/Migrations
 ```
 
-Playwright (`e2e/`) is for browser-visible Blazor workflows; xUnit remains the default for logic and API behavior. The current E2E test covers only the anonymous sign-in page. `Testing` skips local secrets but does not register `TestAuthHandler`; that handler exists only in `WebApplicationFactory` tests. For authenticated browser coverage, use a dedicated test host with isolated data and test-only authentication, never an authentication shortcut in the production host.
+Playwright (`e2e/`) is for browser-visible Blazor workflows; xUnit remains the default for logic and API behavior. The dedicated `tests/Recommendarr.Web.E2EHost` uses isolated seeded data, fake external services, and test-only authentication on loopback. `Testing` skips local secrets but does not register `TestAuthHandler`; that handler remains limited to `WebApplicationFactory` tests. Keep all test authentication out of the production web host.
 
 ## Non-Negotiable Behavior
 

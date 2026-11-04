@@ -153,6 +153,16 @@ public sealed class AuthorizationTests : IAsyncLifetime
         Assert.DoesNotContain("<html", await response.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Unknown_api_routes_return_404_without_redirecting_to_the_browser_not_found_page()
+    {
+        var response = await _app.CreateClient("1").GetAsync("/api/v1/not-a-route");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+        Assert.DoesNotContain("<html", await response.Content.ReadAsStringAsync());
+    }
+
     [Theory]
     [InlineData(null, HttpStatusCode.Unauthorized)]
     [InlineData("1", HttpStatusCode.Forbidden)]
