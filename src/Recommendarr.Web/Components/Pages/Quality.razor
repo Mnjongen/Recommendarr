@@ -30,8 +30,8 @@
         <div class="stats">
             <div class="stat"><div class="value">@c.EmbeddedMovies</div><div class="label">Movies embedded</div><div class="detail">@c.EligibleMovies pass the vote filters</div></div>
             <div class="stat"><div class="value">@c.EmbeddedShows</div><div class="label">Shows embedded</div><div class="detail">@c.EligibleShows pass the vote filters</div></div>
-            <div class="stat"><div class="value">@(c.RecommendationLinks + c.SimilarLinks)</div><div class="label">TMDB links</div><div class="detail">@c.RecommendationLinks recommendations, @c.SimilarLinks similar</div></div>
-            <div class="stat"><div class="value">@c.UnlinkedTitles</div><div class="label">Unlinked candidates</div><div class="detail">from trending lists only, no collaborative signal</div></div>
+            <div class="stat"><div class="value">@(c.RecommendationLinks + c.SimilarLinks + c.CollectionLinks)</div><div class="label">TMDB links</div><div class="detail">@c.RecommendationLinks recommendations, @c.SimilarLinks similar, @c.CollectionLinks franchise</div></div>
+            <div class="stat"><div class="value">@c.UnlinkedTitles</div><div class="label">Unlinked candidates</div><div class="detail">from global TMDB lists only, no collaborative signal</div></div>
             <div class="stat"><div class="value">@c.NotEmbedded</div><div class="label">Waiting for embedding</div><div class="detail">no metadata or vector yet</div></div>
         </div>
         <table>

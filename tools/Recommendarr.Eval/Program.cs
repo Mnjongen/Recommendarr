@@ -19,6 +19,7 @@ using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Embeddings;
 using Recommendarr.Infrastructure.Options;
+using Recommendarr.Infrastructure.Sync;
 using Recommendarr.Infrastructure.Vectors;
 
 var dataDirectory = Path.GetFullPath(args.FirstOrDefault() ?? Path.Combine("src", "Recommendarr.Web", "config"));
@@ -69,7 +70,7 @@ foreach (var (name, vectorsName, options) in experiments)
     var candidates = items
         .Where(i => vectors.ContainsKey(i.Id))
         .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount,
-            links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
+            links[i.Id].Select(RecommendationInputs.ToCandidateLink).ToList()))
         .ToList();
     var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, options);
     var perUser = string.Join(", ", result.Cases.GroupBy(c => c.UserId).Select(g => $"{g.Key} {g.Count(c => c.Rank is not null)}/{g.Count()} {g.Average(c => c.Percentile):P0}"));

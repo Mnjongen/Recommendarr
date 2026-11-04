@@ -76,8 +76,8 @@ public class RecommendationEvaluatorTests
             new(1, MediaType.Movie, Action, 7, 1000, []),
             new(2, MediaType.Movie, Action, 7, 1000, []),
             new(3, MediaType.Movie, Action, 7, 1000, []),
-            new(4, MediaType.Movie, Action, 7, 1000, [new CandidateLink(2, Collaborative: true)]),
-            new(5, MediaType.Movie, Action, 7, 3, [new CandidateLink(9, Collaborative: true)]), // obscure; linked from an unwatched title
+            new(4, MediaType.Movie, Action, 7, 1000, [new CandidateLink(2, CandidateLinkKind.Recommendation)]),
+            new(5, MediaType.Movie, Action, 7, 3, [new CandidateLink(9, CandidateLinkKind.Recommendation)]), // obscure; linked from an unwatched title
         ];
         UserPlay[] plays = [Play("a", 1, 1), Play("a", 2, 2), Play("a", 3, 3), Play("a", 4, 4), Play("a", 5, 5)];
 

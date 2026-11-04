@@ -1,3 +1,4 @@
+using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Models;
 using Recommendarr.Infrastructure.Options;
 using Recommendarr.Infrastructure.Tmdb;
@@ -45,7 +46,8 @@ public sealed class TmdbClientTests : IDisposable
                 "crew": [{ "name": "Lana Wachowski", "job": "Director" }, { "name": "Lilly Wachowski", "job": "Director" },
                          { "name": "Joel Silver", "job": "Producer" }, { "name": "Lana Wachowski", "job": "Director" }]
               },
-              "external_ids": { "imdb_id": "tt0133093", "tvdb_id": null }
+              "external_ids": { "imdb_id": "tt0133093", "tvdb_id": null },
+              "belongs_to_collection": { "id": 2344, "name": "The Matrix Collection" }
             }
             """);
 
@@ -60,6 +62,7 @@ public sealed class TmdbClientTests : IDisposable
         Assert.Equal(["Keanu Reeves", "Carrie-Anne Moss"], m.Cast);
         Assert.Equal(["Lana Wachowski", "Lilly Wachowski"], m.Creators);
         Assert.Equal("tt0133093", m.ImdbId);
+        Assert.Equal(2344, m.CollectionId);
         Assert.Null(m.TvdbId);
         Assert.Equal(25000, m.VoteCount);
     }
@@ -110,6 +113,46 @@ public sealed class TmdbClientTests : IDisposable
 
         var r = Assert.Single(refs);
         Assert.Equal(new MediaReference(60059, MediaType.Tv, "Better Call Saul", 8.7, 5000, 50), r);
+    }
+
+    [Fact]
+    public async Task GetRecommendations_requests_the_given_page()
+    {
+        Respond("movie/603/recommendations", """{ "page": 2, "results": [{ "id": 604, "title": "The Matrix Reloaded" }] }""", ("page", "2"));
+
+        var refs = await _client.GetRecommendationsAsync(MediaType.Movie, 603, page: 2);
+
+        Assert.Equal("The Matrix Reloaded", Assert.Single(refs).Title);
+    }
+
+    [Fact]
+    public async Task GetCollection_returns_its_movies()
+    {
+        Respond("collection/2344", """
+            { "id": 2344, "name": "The Matrix Collection", "parts": [
+              { "id": 603, "title": "The Matrix", "vote_average": 8.2, "vote_count": 25000, "popularity": 80 },
+              { "id": 604, "title": "The Matrix Reloaded", "vote_average": 7.0, "vote_count": 10000, "popularity": 40 }
+            ] }
+            """);
+
+        var parts = await _client.GetCollectionAsync(2344);
+
+        Assert.Equal([(603, MediaType.Movie), (604, MediaType.Movie)], parts.Select(p => (p.TmdbId, p.MediaType)));
+    }
+
+    [Theory]
+    [InlineData(MediaType.Movie, TitleList.Trending, "trending/movie/week")]
+    [InlineData(MediaType.Tv, TitleList.Popular, "tv/popular")]
+    [InlineData(MediaType.Movie, TitleList.TopRated, "movie/top_rated")]
+    [InlineData(MediaType.Movie, TitleList.NowAiring, "movie/now_playing")]
+    [InlineData(MediaType.Tv, TitleList.NowAiring, "tv/on_the_air")]
+    public async Task GetTitleList_maps_each_list_to_its_endpoint(MediaType type, TitleList list, string path)
+    {
+        Respond(path, """{ "results": [{ "id": 1, "title": "A", "name": "A" }] }""", ("page", "3"));
+
+        var refs = await _client.GetTitleListAsync(type, list, page: 3);
+
+        Assert.Equal((1, type), (Assert.Single(refs).TmdbId, Assert.Single(refs).MediaType));
     }
 
     [Fact]

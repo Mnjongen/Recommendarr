@@ -229,9 +229,10 @@ public sealed class TelegramBotJobTests
     private sealed class FakeMetadataSource : IMetadataSource
     {
         public Task<MediaMetadata?> GetDetailsAsync(MediaType type, int tmdbId, CancellationToken ct = default) => Task.FromResult<MediaMetadata?>(null);
-        public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
+        public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, int page = 1, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
         public Task<IReadOnlyList<MediaReference>> GetSimilarAsync(MediaType type, int tmdbId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
-        public Task<IReadOnlyList<MediaReference>> GetTrendingAsync(MediaType type, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
+        public Task<IReadOnlyList<MediaReference>> GetCollectionAsync(int collectionId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
+        public Task<IReadOnlyList<MediaReference>> GetTitleListAsync(MediaType type, TitleList list, int page = 1, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
         public Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default) => Task.FromResult<int?>(null);
         public Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default) => Task.FromResult<int?>(null);
         public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaSearchResult>>([]);

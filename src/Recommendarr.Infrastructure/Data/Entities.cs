@@ -100,6 +100,9 @@ public sealed class ItemEntity
 
     public string? ImdbId { get; set; }
 
+    /// <summary>TMDB collection (franchise) the movie belongs to, if any.</summary>
+    public int? CollectionId { get; set; }
+
     /// <summary>Pipe-separated lists, used to build the embedding document.</summary>
     public string Genres { get; set; } = "";
 
@@ -130,6 +133,7 @@ public enum ItemLinkKind
 {
     Recommendation,
     Similar,
+    Collection,
 }
 
 public sealed class RecommendationEntity

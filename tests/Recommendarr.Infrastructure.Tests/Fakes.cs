@@ -30,6 +30,13 @@ internal sealed class FakeMetadataSource : IMetadataSource
 
     public Dictionary<MediaType, List<MediaReference>> Trending { get; } = [];
 
+    /// <summary>Global lists other than trending.</summary>
+    public Dictionary<(MediaType, TitleList), List<MediaReference>> Lists { get; } = [];
+
+    public Dictionary<int, List<MediaReference>> Collections { get; } = [];
+
+    public List<(MediaType Type, int TmdbId, int Page)> RecommendationCalls { get; } = [];
+
     public Dictionary<(int? TvdbId, string? ImdbId), int> Find { get; } = [];
 
     public Dictionary<(MediaType, string), int> Search { get; } = [];
@@ -42,14 +49,24 @@ internal sealed class FakeMetadataSource : IMetadataSource
         return Task.FromResult(Details.GetValueOrDefault((type, tmdbId)));
     }
 
-    public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<MediaReference>>(Recommendations.GetValueOrDefault((type, tmdbId)) ?? []);
+    /// <summary>Returns every configured recommendation on page 1, so later pages are empty.</summary>
+    public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, int page = 1, CancellationToken ct = default)
+    {
+        RecommendationCalls.Add((type, tmdbId, page));
+        return Task.FromResult<IReadOnlyList<MediaReference>>(page == 1 ? Recommendations.GetValueOrDefault((type, tmdbId)) ?? [] : []);
+    }
 
     public Task<IReadOnlyList<MediaReference>> GetSimilarAsync(MediaType type, int tmdbId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<MediaReference>>(Similar.GetValueOrDefault((type, tmdbId)) ?? []);
 
-    public Task<IReadOnlyList<MediaReference>> GetTrendingAsync(MediaType type, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<MediaReference>>(Trending.GetValueOrDefault(type) ?? []);
+    public Task<IReadOnlyList<MediaReference>> GetCollectionAsync(int collectionId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<MediaReference>>(Collections.GetValueOrDefault(collectionId) ?? []);
+
+    public Task<IReadOnlyList<MediaReference>> GetTitleListAsync(MediaType type, TitleList list, int page = 1, CancellationToken ct = default)
+    {
+        var results = list == TitleList.Trending ? Trending.GetValueOrDefault(type) : Lists.GetValueOrDefault((type, list));
+        return Task.FromResult<IReadOnlyList<MediaReference>>(page == 1 ? results ?? [] : []);
+    }
 
     public Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default) =>
         Task.FromResult<int?>(Find.TryGetValue((tvdbId, imdbId), out var id) ? id : null);

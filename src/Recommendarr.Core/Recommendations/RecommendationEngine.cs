@@ -2,8 +2,21 @@ using Recommendarr.Core.Models;
 
 namespace Recommendarr.Core.Recommendations;
 
-/// <summary>"Seed recommends candidate" edge from TMDB. Collaborative = TMDB recommendations; otherwise TMDB similar.</summary>
-public sealed record CandidateLink(int SeedItemId, bool Collaborative);
+/// <summary>Where a "seed → candidate" edge came from.</summary>
+public enum CandidateLinkKind
+{
+    /// <summary>TMDB recommendations: people who liked the seed also liked the candidate (collaborative).</summary>
+    Recommendation,
+
+    /// <summary>TMDB similar: matching genres and keywords.</summary>
+    Similar,
+
+    /// <summary>Same TMDB collection (franchise): a sequel, prequel or other part.</summary>
+    Collection,
+}
+
+/// <summary>"Seed links to candidate" edge from TMDB.</summary>
+public sealed record CandidateLink(int SeedItemId, CandidateLinkKind Kind);
 
 public sealed record CandidateItem(
     int ItemId,
@@ -25,7 +38,7 @@ public sealed record ScoredRecommendation(
     int? BecauseOfItemId);
 
 /// <summary>A watched title that links to a candidate, and how much that link added to its collaborative signal.</summary>
-public sealed record SeedContribution(int SeedItemId, bool Collaborative, double Strength);
+public sealed record SeedContribution(int SeedItemId, CandidateLinkKind Kind, double Strength);
 
 /// <summary>
 /// Everything that went into one candidate's score, for debugging and tuning. Normalised components are
@@ -154,9 +167,14 @@ public static class RecommendationEngine
             {
                 if (!seedWeights.TryGetValue(link.SeedItemId, out var seedWeight))
                     continue;
-                var strength = seedWeight * (link.Collaborative ? 1 : o.SimilarLinkWeight);
+                var strength = seedWeight * link.Kind switch
+                {
+                    CandidateLinkKind.Recommendation => 1,
+                    CandidateLinkKind.Similar => o.SimilarLinkWeight,
+                    _ => o.CollectionLinkWeight,
+                };
                 collaborative += strength;
-                (seeds ??= []).Add(new SeedContribution(link.SeedItemId, link.Collaborative, strength));
+                (seeds ??= []).Add(new SeedContribution(link.SeedItemId, link.Kind, strength));
                 if (strength > strongest)
                     (strongest, s.BecauseOf) = (strength, link.SeedItemId);
             }

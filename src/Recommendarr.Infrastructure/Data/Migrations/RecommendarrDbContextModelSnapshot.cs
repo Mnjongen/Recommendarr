@@ -107,6 +107,9 @@ namespace Recommendarr.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CollectionId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Creators")
                         .IsRequired()
                         .HasColumnType("TEXT");

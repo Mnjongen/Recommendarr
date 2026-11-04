@@ -12,7 +12,8 @@ public sealed record CatalogSyncResult(int SeedsExpanded, int MetadataFetched);
 
 /// <summary>
 /// Pipeline steps 3–4 (minus embedding): fetches TMDB metadata for catalog items and fills the
-/// candidate pool from each watched item's recommendations/similar lists and from trending.
+/// candidate pool from each watched item's recommendations, similar titles and franchise (TMDB
+/// collection), and from global lists (trending, popular, top rated, now airing).
 /// </summary>
 public sealed class CatalogSyncService(
     RecommendarrDbContext db,
@@ -22,6 +23,9 @@ public sealed class CatalogSyncService(
     ILogger<CatalogSyncService> logger)
 {
     private const int SaveBatchSize = 50;
+
+    /// <summary>TMDB list pages hold 20 results; a shorter page is the last one.</summary>
+    private const int FullPage = 20;
 
     public async Task<CatalogSyncResult> RunAsync(CancellationToken ct = default)
     {
@@ -50,25 +54,47 @@ public sealed class CatalogSyncService(
                 fetched++;
             }
 
-            var recommendations = await metadata.GetRecommendationsAsync(seed.MediaType, seed.TmdbId, ct);
+            var recommendations = new List<MediaReference>();
+            for (var page = 1; page <= tmdbOptions.Value.RecommendationPages; page++)
+            {
+                var results = await metadata.GetRecommendationsAsync(seed.MediaType, seed.TmdbId, page, ct);
+                recommendations.AddRange(results);
+                if (results.Count < FullPage)
+                    break;
+            }
             var similar = await metadata.GetSimilarAsync(seed.MediaType, seed.TmdbId, ct);
+            var collection = seed.CollectionId is { } collectionId ? await metadata.GetCollectionAsync(collectionId, ct) : [];
             var recommendationItems = await AddCandidatesAsync(catalog, recommendations, ct);
             var similarItems = await AddCandidatesAsync(catalog, similar, ct);
+            var collectionItems = await AddCandidatesAsync(catalog, collection, ct);
 
             // Links only carry ids, so new candidates must be saved before they can be linked.
             await db.SaveChangesAsync(ct);
             await ReplaceLinksAsync(seed, ItemLinkKind.Recommendation, recommendationItems, ct);
             await ReplaceLinksAsync(seed, ItemLinkKind.Similar, similarItems, ct);
+            await ReplaceLinksAsync(seed, ItemLinkKind.Collection, collectionItems, ct);
             await db.SaveChangesAsync(ct);
             seedProgress.Report(++seedsDone);
         }
 
-        logger.LogInformation("Fetching trending titles");
+        // Titles nobody's history leads to yet: new releases, big classics, what's on now.
+        logger.LogInformation("Fetching trending, popular, top rated and now airing titles");
         foreach (var type in new[] { MediaType.Movie, MediaType.Tv })
-            await AddCandidatesAsync(catalog, await metadata.GetTrendingAsync(type, ct), ct);
+        {
+            foreach (var list in Enum.GetValues<TitleList>())
+            {
+                for (var page = 1; page <= tmdbOptions.Value.ListPages; page++)
+                {
+                    var results = await metadata.GetTitleListAsync(type, list, page, ct);
+                    await AddCandidatesAsync(catalog, results, ct);
+                    if (results.Count < FullPage)
+                        break;
+                }
+            }
+        }
         await db.SaveChangesAsync(ct);
 
-        // Everything else that is new or stale: fresh candidates, trending titles, and old entries.
+        // Everything else that is new or stale: fresh candidates, list titles, and old entries.
         var pending = await db.Items
             .Where(i => i.MetadataFetchedAt == null || i.MetadataFetchedAt < staleBefore)
             .ToListAsync(ct);
@@ -110,6 +136,7 @@ public sealed class CatalogSyncService(
             item.Popularity = m.Popularity;
             item.TvdbId = m.TvdbId ?? item.TvdbId;
             item.ImdbId = m.ImdbId ?? item.ImdbId;
+            item.CollectionId = m.CollectionId;
             item.Genres = string.Join('|', m.Genres);
             item.Keywords = string.Join('|', m.Keywords);
             item.Cast = string.Join('|', m.Cast);

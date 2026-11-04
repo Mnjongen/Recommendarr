@@ -41,10 +41,18 @@ public static class RecommendationInputs
                 vectors[i.Id],
                 i.VoteAverage,
                 i.VoteCount,
-                links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
+                links[i.Id].Select(ToCandidateLink).ToList()))
             .ToList();
         return new CatalogSnapshot(candidates, vectors, items.ToDictionary(i => i.Id));
     }
+
+    public static CandidateLink ToCandidateLink(ItemLinkEntity link) => new(link.SourceItemId, link.Kind switch
+    {
+        ItemLinkKind.Recommendation => CandidateLinkKind.Recommendation,
+        ItemLinkKind.Similar => CandidateLinkKind.Similar,
+        ItemLinkKind.Collection => CandidateLinkKind.Collection,
+        _ => throw new ArgumentOutOfRangeException(nameof(link), link.Kind, null),
+    });
 
     public static async Task<UserInputs> LoadUserAsync(
         RecommendarrDbContext db,

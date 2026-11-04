@@ -19,6 +19,7 @@ public sealed record CatalogStats(
     int NotEmbedded,
     int RecommendationLinks,
     int SimilarLinks,
+    int CollectionLinks,
     int UnlinkedTitles,
     IReadOnlyList<UserCatalogStats> Users);
 
@@ -120,6 +121,7 @@ public sealed class RecommendationQualityService(
             await db.Items.CountAsync(i => i.EmbeddedAt == null, ct),
             linkCounts.FirstOrDefault(l => l.Key == ItemLinkKind.Recommendation)?.Count ?? 0,
             linkCounts.FirstOrDefault(l => l.Key == ItemLinkKind.Similar)?.Count ?? 0,
+            linkCounts.FirstOrDefault(l => l.Key == ItemLinkKind.Collection)?.Count ?? 0,
             embedded.Count(i => !linkedTargets.Contains(i.Id) && !watchedIds.Contains(i.Id)),
             users);
     }

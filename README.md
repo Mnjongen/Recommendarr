@@ -40,6 +40,7 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Tautulli__BaseUrl`, `Tautulli__ApiKey` | Tautulli connection |
 | `Plex__BaseUrl`, `Plex__Token` | Plex connection (server owner's token) |
 | `Tmdb__ApiKey` | TMDB API Read Access Token |
+| `Tmdb__RecommendationPages`, `Tmdb__ListPages` | Catalog size: pages (20 titles each) of TMDB recommendations per watched title, and of each global list (trending, popular, top rated, now airing). Default `2` each |
 | `Sync__Interval` | How often history and TMDB metadata are synced (default `06:00:00`) |
 | `Seerr__BaseUrl`, `Seerr__ApiKey` | Seerr connection |
 | `Telegram__BotToken` | Optional Telegram bot token; enables private-chat polling |
