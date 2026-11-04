@@ -26,21 +26,28 @@ public sealed class EvaluationCoordinator(IServiceScopeFactory scopes, ILogger<E
     /// <summary>Starts a run unless one is already going; returns whether it started.</summary>
     public bool TryStart(IReadOnlyList<EvaluationExperiment> experiments)
     {
+        CancellationToken token;
         lock (_lock)
         {
             if (IsRunning)
                 return false;
             IsRunning = true;
             _cancellation = new CancellationTokenSource();
+            token = _cancellation.Token;
         }
 
         (Progress, LastError) = ("Starting…", null);
         StateChanged?.Invoke();
-        _ = Task.Run(() => RunAsync(experiments, _cancellation.Token));
+        _ = Task.Run(() => RunAsync(experiments, token));
         return true;
     }
 
-    public void Cancel() => _cancellation?.Cancel();
+    /// <summary>Under the lock, because the run disposes the token source when it finishes.</summary>
+    public void Cancel()
+    {
+        lock (_lock)
+            _cancellation?.Cancel();
+    }
 
     private async Task RunAsync(IReadOnlyList<EvaluationExperiment> experiments, CancellationToken ct)
     {

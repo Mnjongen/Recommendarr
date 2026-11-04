@@ -6,14 +6,19 @@ using Recommendarr.Infrastructure.Data;
 
 namespace Recommendarr.Infrastructure.Sync;
 
-/// <summary>Display data for an embedded catalog title.</summary>
-public sealed record CatalogTitle(int Id, MediaType MediaType, string Title, int? Year, double VoteAverage, int VoteCount);
+/// <summary>Display data for a catalog title. <paramref name="Embedded"/> is false until it has a vector, so the engine can't score it.</summary>
+public sealed record CatalogTitle(int Id, MediaType MediaType, string Title, int? Year, double VoteAverage, int VoteCount, bool Embedded);
 
-/// <summary>The embedded catalog as the engine sees it. Shared by every user, so load it once per run.</summary>
+/// <summary>
+/// The catalog as the engine sees it. Shared by every user, so load it once per run.
+/// <paramref name="Candidates"/> and <paramref name="Vectors"/> hold embedded titles only; <paramref name="Titles"/>
+/// covers the whole catalog, and <paramref name="Unembedded"/> lists the rest so evaluation can count them as misses.
+/// </summary>
 public sealed record CatalogSnapshot(
     IReadOnlyList<CandidateItem> Candidates,
     IReadOnlyDictionary<int, float[]> Vectors,
-    IReadOnlyDictionary<int, CatalogTitle> Titles);
+    IReadOnlyDictionary<int, CatalogTitle> Titles,
+    IReadOnlyList<EvaluationTarget> Unembedded);
 
 /// <summary>One user's engine input: weighted taste items and everything that must not be recommended.</summary>
 public sealed record UserInputs(
@@ -28,22 +33,25 @@ public static class RecommendationInputs
     public static async Task<CatalogSnapshot> LoadCatalogAsync(RecommendarrDbContext db, IVectorStore store, CancellationToken ct = default)
     {
         var items = await db.Items.AsNoTracking()
-            .Where(i => i.EmbeddedAt != null)
-            .Select(i => new CatalogTitle(i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount))
+            .Select(i => new { i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, Embedded = i.EmbeddedAt != null })
             .ToListAsync(ct);
-        var vectors = await store.GetAsync(items.Select(i => i.Id), ct);
+        var vectors = await store.GetAsync(items.Where(i => i.Embedded).Select(i => i.Id), ct);
         var links = (await db.ItemLinks.AsNoTracking().ToListAsync(ct)).ToLookup(l => l.TargetItemId);
+        List<CandidateLink> LinksTo(int itemId) =>
+            links[itemId].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList();
+
         var candidates = items
             .Where(i => vectors.ContainsKey(i.Id))
-            .Select(i => new CandidateItem(
-                i.Id,
-                i.MediaType,
-                vectors[i.Id],
-                i.VoteAverage,
-                i.VoteCount,
-                links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
+            .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount, LinksTo(i.Id)))
             .ToList();
-        return new CatalogSnapshot(candidates, vectors, items.ToDictionary(i => i.Id));
+        var unembedded = items
+            .Where(i => !vectors.ContainsKey(i.Id))
+            .Select(i => new EvaluationTarget(i.Id, i.MediaType, LinksTo(i.Id)))
+            .ToList();
+        var titles = items.ToDictionary(
+            i => i.Id,
+            i => new CatalogTitle(i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, vectors.ContainsKey(i.Id)));
+        return new CatalogSnapshot(candidates, vectors, titles, unembedded);
     }
 
     public static async Task<UserInputs> LoadUserAsync(

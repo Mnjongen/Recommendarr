@@ -197,6 +197,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 tr.selectable { cursor: pointer; }
 tr.selectable:hover td { background: var(--surface-2); }
 tr.selected td { background: var(--surface-2); }
+/* The keyboard-accessible control for a selectable row; clicking anywhere on the row does the same. */
+.row-toggle { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.row-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .better { color: var(--ok); }
 .worse { color: var(--danger); }
 .definitions { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 1rem 0 0; font-size: 0.85rem; color: var(--muted); }

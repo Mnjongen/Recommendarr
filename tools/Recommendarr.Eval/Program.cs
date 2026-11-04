@@ -40,6 +40,10 @@ var plays = (await db.WatchEvents.AsNoTracking()
 var items = await db.Items.AsNoTracking().Where(i => i.EmbeddedAt != null).ToListAsync();
 var links = (await db.ItemLinks.AsNoTracking().ToListAsync()).ToLookup(l => l.TargetItemId);
 var storedVectors = await new SqliteVecStore(db).GetAsync(items.Select(i => i.Id));
+// Watched titles without a vector still count, as misses.
+var unembedded = (await db.Items.AsNoTracking().Where(i => i.EmbeddedAt == null).Select(i => new { i.Id, i.MediaType }).ToListAsync())
+    .Select(i => new EvaluationTarget(i.Id, i.MediaType, links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
+    .ToList();
 Console.WriteLine($"{plays.Count} plays, {items.Count} embedded titles, {storedVectors.Count} stored vectors\n");
 
 // Alternative embedding texts. "stored" is what the app embedded (the production document).
@@ -71,7 +75,7 @@ foreach (var (name, vectorsName, options) in experiments)
         .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount,
             links[i.Id].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList()))
         .ToList();
-    var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, options);
+    var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, options, unembedded: unembedded);
     var perUser = string.Join(", ", result.Cases.GroupBy(c => c.UserId).Select(g => $"{g.Key} {g.Count(c => c.Rank is not null)}/{g.Count()} {g.Average(c => c.Percentile):P0}"));
     Console.WriteLine($"{name,-36} {result.Hits,3}/{result.Cases.Count,-4} {result.HitRate,7:P0} {result.Mrr,6:0.000} {result.MeanPercentile,6:P1} {result.EligibleShare,5:P0} {result.LinkedShare,5:P0}   {perUser}");
 }

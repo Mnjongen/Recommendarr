@@ -5,14 +5,18 @@ namespace Recommendarr.Core.Recommendations;
 /// <summary>A play by a specific profile, for offline evaluation.</summary>
 public sealed record UserPlay(string UserId, PlaySignal Play);
 
+/// <summary>A catalog title the engine can't score (no vector yet), so it can still be counted as a missed case.</summary>
+public sealed record EvaluationTarget(int ItemId, MediaType MediaType, IReadOnlyList<CandidateLink> Links);
+
 /// <summary>
 /// One held-out title: was it recommended just before the profile first watched it?
 /// <paramref name="Rank"/> is its place in the real (diversified) top list, null when it missed.
 /// <paramref name="Percentile"/> is its position among all candidates of its type by score
 /// (0 = best, 0.5 = what random ordering would give, 1 = filtered out, e.g. too few TMDB votes).
-/// <paramref name="Eligible"/> is false when the title never entered the scored pool (vote filters).
+/// <paramref name="Eligible"/> is false when the title never entered the scored pool (vote filters, or not embedded).
 /// <paramref name="Linked"/> is true when a TMDB recommendation/similar link from an earlier watch points
 /// at it, i.e. catalog expansion from the profile's history could have found it.
+/// <paramref name="Embedded"/> is false when the title has no vector yet, so the engine couldn't score it at all.
 /// </summary>
 public sealed record EvaluationCase(
     string UserId,
@@ -23,7 +27,8 @@ public sealed record EvaluationCase(
     int? Rank,
     double Percentile,
     bool Eligible = true,
-    bool Linked = false);
+    bool Linked = false,
+    bool Embedded = true);
 
 public sealed record EvaluationResult(IReadOnlyList<EvaluationCase> Cases, int K)
 {
@@ -52,6 +57,8 @@ public sealed record EvaluationResult(IReadOnlyList<EvaluationCase> Cases, int K
 /// "Next watch" evaluation. For every title a profile watched (beyond the first few), rewind to just
 /// before its first play, recommend from the earlier history only, and record where the title
 /// ranked. Only used offline, to compare engine settings on real history.
+/// Watched titles that aren't embedded yet still count, as ineligible misses, when
+/// <c>unembedded</c> describes them; only titles with no catalog entry at all are skipped.
 /// </summary>
 /// <remarks>
 /// The candidate pool is today's catalog, so it may contain titles that only entered the catalog
@@ -66,9 +73,13 @@ public static class RecommendationEvaluator
         IReadOnlyList<CandidateItem> candidates,
         RecommendationOptions options,
         int minTrainingTitles = 3,
+        IReadOnlyList<EvaluationTarget>? unembedded = null,
         CancellationToken ct = default)
     {
-        var byId = candidates.ToDictionary(c => c.ItemId);
+        var scorable = candidates.Select(c => c.ItemId).ToHashSet();
+        var targets = (unembedded ?? []).Where(t => !scorable.Contains(t.ItemId)).ToDictionary(t => t.ItemId);
+        foreach (var candidate in candidates)
+            targets[candidate.ItemId] = new EvaluationTarget(candidate.ItemId, candidate.MediaType, candidate.Links);
 
         // Each title the profile actually got into (not abandoned) is a test case at its first play.
         var work = plays
@@ -78,8 +89,8 @@ public static class RecommendationEvaluator
                 var userPlays = user.Select(p => p.Play).ToList();
                 return userPlays
                     .GroupBy(p => p.ItemId)
-                    .Where(g => TasteProfile.CompletionFactor(g.Max(p => p.PercentComplete)) > 0 && byId.ContainsKey(g.Key))
-                    .Select(g => (UserId: user.Key, Plays: userPlays, Target: byId[g.Key], FirstPlay: g.Min(p => p.WatchedAt)));
+                    .Where(g => TasteProfile.CompletionFactor(g.Max(p => p.PercentComplete)) > 0 && targets.ContainsKey(g.Key))
+                    .Select(g => (UserId: user.Key, Plays: userPlays, Target: targets[g.Key], FirstPlay: g.Min(p => p.WatchedAt)));
             })
             .ToList();
 
@@ -87,7 +98,7 @@ public static class RecommendationEvaluator
         var cases = work
             .AsParallel()
             .WithCancellation(ct)
-            .Select(w => Evaluate(w.UserId, w.Plays, w.Target, w.FirstPlay, vectors, candidates, options, minTrainingTitles))
+            .Select(w => Evaluate(w.UserId, w.Plays, w.Target, scorable.Contains(w.Target.ItemId), w.FirstPlay, vectors, candidates, options, minTrainingTitles))
             .Where(c => c is not null)
             .Select(c => c!)
             .ToList()
@@ -102,7 +113,8 @@ public static class RecommendationEvaluator
     private static EvaluationCase? Evaluate(
         string userId,
         List<PlaySignal> userPlays,
-        CandidateItem target,
+        EvaluationTarget target,
+        bool embedded,
         DateTimeOffset firstPlay,
         IReadOnlyDictionary<int, float[]> vectors,
         IReadOnlyList<CandidateItem> candidates,
@@ -114,9 +126,11 @@ public static class RecommendationEvaluator
         if (watched.Count < minTrainingTitles)
             return null;
 
+        // Catalog expansion follows every earlier play, embedded or not, finished or not.
         var excluded = history.Select(p => p.ItemId).ToHashSet();
-        var seeds = watched.Select(w => w.ItemId).ToHashSet();
-        var linked = target.Links.Any(l => seeds.Contains(l.SeedItemId));
+        var linked = target.Links.Any(l => excluded.Contains(l.SeedItemId));
+        if (!embedded)
+            return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, null, 1.0, Eligible: false, linked, Embedded: false);
 
         var pool = RecommendationEngine.Score(watched, candidates, excluded, options)
             .Where(s => s.Candidate.MediaType == target.MediaType)
