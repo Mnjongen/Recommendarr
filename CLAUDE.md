@@ -17,7 +17,7 @@ dotnet ef migrations add <Name> -p src/Recommendarr.Infrastructure -s src/Recomm
 docker build -t recommendarr .
 git tag v0.1.0 && git push origin v0.1.0   # release: tests, multi-arch image to GHCR, GitHub release
 ```
-CI (`.github/workflows/ci.yml`) runs on every push and PR. `release.yml` runs only for `v*.*.*` tags.
+CI (`.github/workflows/ci.yml`) runs on pushes to `dev` and `main`, and on PRs targeting `main`. It reuses `.github/workflows/tests.yml` for .NET and Firefox tests; `release.yml` runs the same tests before publishing on `v*.*.*` tags.
 Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 
 ## Architecture
