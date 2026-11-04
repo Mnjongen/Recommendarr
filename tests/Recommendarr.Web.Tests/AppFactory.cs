@@ -19,22 +19,33 @@ namespace Recommendarr.Web.Tests;
 public sealed class AppFactory : WebApplicationFactory<Program>
 {
     private readonly string _dataDirectory = Directory.CreateTempSubdirectory("rr-web-tests-").FullName;
+    private readonly bool _trustedProxy;
 
-    public AppFactory()
+    public AppFactory() : this(trustedProxy: true)
     {
+    }
+
+    private AppFactory(bool trustedProxy)
+    {
+        _trustedProxy = trustedProxy;
         // Program reads these before the host is built, so pass them as environment variables.
         Environment.SetEnvironmentVariable("Recommendarr__Storage__DataDirectory", _dataDirectory);
         Environment.SetEnvironmentVariable("Recommendarr__Sync__RunOnStartup", "false");
     }
 
+    public static AppFactory WithoutTrustedProxy() => new(trustedProxy: false);
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, configuration) =>
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [$"{WebOptions.Section}:TrustedProxies:0"] = "127.0.0.1",
-            }));
+        {
+            if (_trustedProxy)
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [$"{WebOptions.Section}:TrustedProxies:0"] = "127.0.0.1",
+                });
+        });
         builder.ConfigureTestServices(services =>
         {
             // Authenticate with the test handler; challenges and forbids still go through the

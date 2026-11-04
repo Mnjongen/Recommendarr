@@ -147,6 +147,18 @@ public sealed class HomePageTests : BunitContext
         });
     }
 
+    [Fact]
+    public void A_demoted_admin_viewing_their_own_profile_loses_the_profile_list()
+    {
+        SignIn("1", admin: true);
+        var cut = Render<Home>();
+        _authorization.IsCurrentAdmin = false;
+
+        cut.Find("select").Change("1");
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("select")));
+    }
+
     [Theory]
     [InlineData("request")]
     [InlineData("feedback")]
@@ -166,6 +178,30 @@ public sealed class HomePageTests : BunitContext
         Assert.Empty(_page.Requests);
         Assert.Empty(_page.Feedback);
         cut.WaitForAssertion(() => Assert.Equal("Recommended for you", cut.Find("h1").TextContent));
+    }
+
+    [Theory]
+    [InlineData("request")]
+    [InlineData("feedback")]
+    public void A_profile_change_during_authorization_cancels_the_action(string action)
+    {
+        SignIn("1", admin: true);
+        var cut = Render<Home>();
+        cut.Find("select").Change("2");
+        cut.WaitForAssertion(() => Assert.Equal("Recommended for bob", cut.Find("h1").TextContent));
+
+        var authorization = new TaskCompletionSource<bool>();
+        _authorization.NextCanActFor = authorization;
+        cut.Find($".{(action == "request" ? "request" : "feedback-like")}").Click();
+        cut.WaitForAssertion(() => Assert.Equal(1, _authorization.PendingCanActForChecks));
+        cut.Find("select").Change("1");
+        authorization.SetResult(true);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(_page.Requests);
+            Assert.Empty(_page.Feedback);
+        });
     }
 
     [Fact]
@@ -267,10 +303,23 @@ public sealed class HomePageTests : BunitContext
     {
         public bool IsCurrentAdmin { get; set; } = true;
 
+        public TaskCompletionSource<bool>? NextCanActFor { get; set; }
+
+        public int PendingCanActForChecks { get; private set; }
+
         public Task<bool> IsAdminAsync(ClaimsPrincipal user, CancellationToken ct = default) =>
             Task.FromResult(IsCurrentAdmin && user.IsInRole(AuthConstants.AdminRole));
 
-        public Task<bool> CanActForAsync(ClaimsPrincipal user, string plexUserId, CancellationToken ct = default) =>
-            Task.FromResult(user.PlexUserId() == plexUserId || IsCurrentAdmin && user.IsInRole(AuthConstants.AdminRole));
+        public Task<bool> CanActForAsync(ClaimsPrincipal user, string plexUserId, CancellationToken ct = default)
+        {
+            if (NextCanActFor is { } next)
+            {
+                NextCanActFor = null;
+                PendingCanActForChecks++;
+                return next.Task;
+            }
+
+            return Task.FromResult(user.PlexUserId() == plexUserId || IsCurrentAdmin && user.IsInRole(AuthConstants.AdminRole));
+        }
     }
 }

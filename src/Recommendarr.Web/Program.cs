@@ -28,12 +28,12 @@ builder.Services.AddRazorComponents()
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
 builder.Services.Configure<WebOptions>(builder.Configuration.GetSection(WebOptions.Section));
 builder.Services.AddOptions<ForwardedHeadersOptions>()
-    .Configure<IOptions<WebOptions>>((options, webOptions) =>
+    .Configure<IOptions<WebOptions>>((options, configuredWebOptions) =>
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
-        foreach (var address in webOptions.Value.TrustedProxies)
+        foreach (var address in configuredWebOptions.Value.TrustedProxies)
             options.KnownProxies.Add(IPAddress.Parse(address));
     });
 builder.Services.AddSingleton<SyncCoordinator>();
@@ -88,7 +88,9 @@ builder.Services.AddScoped<IAuthorizationHandler, CurrentAdminAuthorizationHandl
 
 var app = builder.Build();
 
-app.UseForwardedHeaders();
+var webOptions = app.Services.GetRequiredService<IOptions<WebOptions>>().Value;
+if (webOptions.TrustedProxies.Length > 0)
+    app.UseForwardedHeaders();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

@@ -195,6 +195,19 @@ public sealed class AuthorizationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Untrusted_forwarded_proto_is_ignored_when_no_proxy_is_configured()
+    {
+        using var untrustedProxyApp = AppFactory.WithoutTrustedProxy();
+        var client = untrustedProxyApp.CreateClient(profile: null);
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.StartsWith("http://", response.Headers.Location?.AbsoluteUri);
+    }
+
+    [Fact]
     public async Task Signed_in_profiles_see_their_recommendations_page()
     {
         var html = await _app.CreateClient("1").GetStringAsync("/");

@@ -82,9 +82,10 @@ else
     private async Task LoadAsync()
     {
         var user = (await AuthState).User;
+        if (!await AdminAuthorization.IsAdminAsync(user))
+            _profiles = null;
         if (!await AdminAuthorization.CanActForAsync(user, _plexUserId))
         {
-            _profiles = null;
             _items = null;
             _plexUserId = _ownId;
         }
@@ -113,16 +114,19 @@ else
     private async Task RequestAsync(RecommendationView item)
     {
         var user = (await AuthState).User;
-        if (!await AdminAuthorization.CanActForAsync(user, _plexUserId))
+        var plexUserId = _plexUserId;
+        if (!await AdminAuthorization.CanActForAsync(user, plexUserId))
         {
             await LoadAsync();
             return;
         }
+        if (plexUserId != _plexUserId)
+            return;
         if (!_busy.Add(item.TmdbId))
             return;
         try
         {
-            var outcome = await Page.RequestAsync(_plexUserId, item.MediaType, item.TmdbId);
+            var outcome = await Page.RequestAsync(plexUserId, item.MediaType, item.TmdbId);
             if (outcome.Kind == RequestOutcomeKind.Created)
             {
                 var index = _items!.IndexOf(item);
@@ -147,16 +151,19 @@ else
     private async Task FeedbackAsync(RecommendationView item, FeedbackKind kind)
     {
         var user = (await AuthState).User;
-        if (!await AdminAuthorization.CanActForAsync(user, _plexUserId))
+        var plexUserId = _plexUserId;
+        if (!await AdminAuthorization.CanActForAsync(user, plexUserId))
         {
             await LoadAsync();
             return;
         }
+        if (plexUserId != _plexUserId)
+            return;
         if (!_feedbackBusy.Add(item.TmdbId))
             return;
         try
         {
-            var outcome = await Page.RecordFeedbackAsync(_plexUserId, item.MediaType, item.TmdbId, kind);
+            var outcome = await Page.RecordFeedbackAsync(plexUserId, item.MediaType, item.TmdbId, kind);
             if (outcome != FeedbackOutcome.Saved)
             {
                 ShowMessage("Couldn't save your feedback. Try again after the next sync.", error: true);
