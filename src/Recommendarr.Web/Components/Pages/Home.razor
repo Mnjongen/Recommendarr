@@ -3,6 +3,7 @@
 @rendermode InteractiveServer
 @using Recommendarr.Infrastructure.Seerr
 @inject IRecommendationsPageService Page
+@inject ICurrentAdminAuthorization AdminAuthorization
 
 <PageTitle>Recommendations · Recommendarr</PageTitle>
 
@@ -73,13 +74,27 @@ else
         _ownId = _plexUserId = user.PlexUserId() ?? "";
 
         // The admin can look at (and request for) every profile, which helps when tuning.
-        if (user.IsAdmin())
+        if (await AdminAuthorization.IsAdminAsync(user))
             _profiles = await Page.GetProfilesAsync();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
+        var user = (await AuthState).User;
+        if (!await AdminAuthorization.IsAdminAsync(user))
+            _profiles = null;
+        if (!await AdminAuthorization.CanActForAsync(user, _plexUserId))
+        {
+            _items = null;
+            _plexUserId = _ownId;
+        }
+        if (!await AdminAuthorization.CanActForAsync(user, _plexUserId))
+        {
+            _items = [];
+            return;
+        }
+
         _items = (await Page.GetRecommendationsAsync(_plexUserId)).ToList();
         if (_items.Count > 0 && _items.All(i => i.MediaType != _type))
             _type = _items[0].MediaType;
@@ -88,22 +103,30 @@ else
     private async Task ChangeUserAsync(ChangeEventArgs e)
     {
         var user = (await AuthState).User;
-        if (e.Value is string id && user.CanActFor(id))
+        if (e.Value is string id && await AdminAuthorization.CanActForAsync(user, id))
         {
             _plexUserId = id;
             _items = null;
-            await LoadAsync();
         }
+        await LoadAsync();
     }
 
     private async Task RequestAsync(RecommendationView item)
     {
         var user = (await AuthState).User;
-        if (!user.CanActFor(_plexUserId) || !_busy.Add(item.TmdbId))
+        var plexUserId = _plexUserId;
+        if (!await AdminAuthorization.CanActForAsync(user, plexUserId))
+        {
+            await LoadAsync();
+            return;
+        }
+        if (plexUserId != _plexUserId)
+            return;
+        if (!_busy.Add(item.TmdbId))
             return;
         try
         {
-            var outcome = await Page.RequestAsync(_plexUserId, item.MediaType, item.TmdbId);
+            var outcome = await Page.RequestAsync(plexUserId, item.MediaType, item.TmdbId);
             if (outcome.Kind == RequestOutcomeKind.Created)
             {
                 var index = _items!.IndexOf(item);
@@ -128,11 +151,19 @@ else
     private async Task FeedbackAsync(RecommendationView item, FeedbackKind kind)
     {
         var user = (await AuthState).User;
-        if (!user.CanActFor(_plexUserId) || !_feedbackBusy.Add(item.TmdbId))
+        var plexUserId = _plexUserId;
+        if (!await AdminAuthorization.CanActForAsync(user, plexUserId))
+        {
+            await LoadAsync();
+            return;
+        }
+        if (plexUserId != _plexUserId)
+            return;
+        if (!_feedbackBusy.Add(item.TmdbId))
             return;
         try
         {
-            var outcome = await Page.RecordFeedbackAsync(_plexUserId, item.MediaType, item.TmdbId, kind);
+            var outcome = await Page.RecordFeedbackAsync(plexUserId, item.MediaType, item.TmdbId, kind);
             if (outcome != FeedbackOutcome.Saved)
             {
                 ShowMessage("Couldn't save your feedback. Try again after the next sync.", error: true);

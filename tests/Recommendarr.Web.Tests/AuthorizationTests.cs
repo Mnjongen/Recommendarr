@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Recommendarr.Core.Models;
 using Recommendarr.Infrastructure.Data;
+using Recommendarr.Web.Auth;
 
 namespace Recommendarr.Web.Tests;
 
@@ -38,6 +42,42 @@ public sealed class AuthorizationTests : IAsyncLifetime
     {
         var response = await _app.CreateClient(profile: null).GetAsync("/api/v1/health");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Unconfigured_host_names_are_rejected()
+    {
+        var client = _app.CreateClient(profile: null);
+        client.DefaultRequestHeaders.Host = "attacker.example";
+
+        var response = await client.GetAsync("/api/v1/health");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public void Session_cookie_is_always_secure()
+    {
+        var options = _app.Services
+            .GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        Assert.Equal(CookieSecurePolicy.Always, options.Cookie.SecurePolicy);
+    }
+
+    [Fact]
+    public void Plex_callback_uses_the_configured_public_origin()
+    {
+        var http = new DefaultHttpContext();
+        http.Request.Scheme = "http";
+        http.Request.Host = new HostString("attacker.example");
+        http.Request.PathBase = "/recommendarr";
+
+        var callback = AuthEndpoints.BuildCallbackUrl(
+            http,
+            new WebOptions { PublicUrl = "https://recommendarr.example.com" });
+
+        Assert.Equal("https://recommendarr.example.com/recommendarr/auth/plex/callback", callback);
     }
 
     [Theory]
@@ -122,6 +162,23 @@ public sealed class AuthorizationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Demoted_admin_loses_admin_access_and_cross_profile_access_immediately()
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<RecommendarrDbContext>();
+        var formerAdmin = new UserEntity { PlexUserId = "3", Username = "former-admin", IsAdmin = true };
+        db.Users.Add(formerAdmin);
+        await db.SaveChangesAsync();
+
+        formerAdmin.IsAdmin = false;
+        await db.SaveChangesAsync();
+
+        var client = _app.CreateClient("3,admin");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/users")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/users/1/recommendations")).StatusCode);
+    }
+
+    [Fact]
     public async Task Pages_send_visitors_to_sign_in()
     {
         var anonymous = _app.CreateClient(profile: null);
@@ -132,6 +189,31 @@ public sealed class AuthorizationTests : IAsyncLifetime
 
         var login = await anonymous.GetStringAsync("/login");
         Assert.Contains("Sign in with Plex", login);
+    }
+
+    [Fact]
+    public async Task Trusted_proxy_forwarded_proto_is_used_for_auth_redirects()
+    {
+        var client = _app.CreateClient(profile: null);
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.StartsWith("https://", response.Headers.Location?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task Untrusted_forwarded_proto_is_ignored_when_no_proxy_is_configured()
+    {
+        using var untrustedProxyApp = AppFactory.WithoutTrustedProxy();
+        var client = untrustedProxyApp.CreateClient(profile: null);
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.StartsWith("http://", response.Headers.Location?.AbsoluteUri);
     }
 
     [Fact]
