@@ -17,9 +17,10 @@ public sealed record MediaMetadata(
     string? PosterPath,
     string? OriginalLanguage = null,
     int? TvdbId = null,
-    string? ImdbId = null);
+    string? ImdbId = null,
+    int? CollectionId = null);
 
-/// <summary>A lightweight TMDB list result (recommendations, similar, trending).</summary>
+/// <summary>A lightweight TMDB list result (recommendations, similar, collections, global lists).</summary>
 public sealed record MediaReference(int TmdbId, MediaType MediaType, string Title, double VoteAverage, int VoteCount, double Popularity);
 
 /// <summary>A title found by a free-text TMDB search.</summary>

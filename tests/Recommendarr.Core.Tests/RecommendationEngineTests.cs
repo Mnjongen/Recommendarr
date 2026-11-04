@@ -86,7 +86,7 @@ public class RecommendationEngineTests
         CandidateItem[] candidates =
         [
             Candidate(10, Mix(Action, Documentary, 0.3f)),
-            Candidate(11, Mix(Action, Documentary, 0.3f), links: [new CandidateLink(1, false), new CandidateLink(2, true)]),
+            Candidate(11, Mix(Action, Documentary, 0.3f), links: [new CandidateLink(1, CandidateLinkKind.Similar), new CandidateLink(2, CandidateLinkKind.Recommendation)]),
             Candidate(12, Documentary),
         ];
 
@@ -161,8 +161,8 @@ public class RecommendationEngineTests
         WatchedItem[] watched = [new(1, Action, 1)];
         CandidateItem[] candidates =
         [
-            Candidate(10, Action, links: new CandidateLink(1, Collaborative: true)),
-            Candidate(11, Mix(Action, Romance, 0.5f), links: new CandidateLink(1, Collaborative: false)),
+            Candidate(10, Action, links: new CandidateLink(1, CandidateLinkKind.Recommendation)),
+            Candidate(11, Mix(Action, Romance, 0.5f), links: new CandidateLink(1, CandidateLinkKind.Similar)),
             Candidate(12, Romance, rating: 9, votes: 10_000),
         ];
 
@@ -178,7 +178,7 @@ public class RecommendationEngineTests
         var top = explanation.Candidates[0];
         Assert.Equal(1.0, top.RawSimilarity, 5);
         Assert.Equal(Math.Log(2), top.RawCollaborative, 9);
-        Assert.Equal(new SeedContribution(1, true, 1), Assert.Single(top.Seeds));
+        Assert.Equal(new SeedContribution(1, CandidateLinkKind.Recommendation, 1), Assert.Single(top.Seeds));
         Assert.Equal(o.SimilarLinkWeight, Assert.Single(explanation.Candidates[1].Seeds).Strength, 9);
         Assert.Empty(explanation.Candidates[2].Seeds);
         Assert.True(explanation.Candidates[2].RawQuality > top.RawQuality);
@@ -199,5 +199,23 @@ public class RecommendationEngineTests
             .OrderBy(c => c.MediaType).ThenBy(c => c.Rank);
 
         Assert.Equal(recommended.Select(r => (r.ItemId, r.Rank)), explained.Select(c => (c.ItemId, c.Rank!.Value)));
+    }
+
+    [Fact]
+    public void Franchise_links_use_their_own_weight()
+    {
+        WatchedItem[] watched = [new(1, Action, 1)];
+        CandidateItem[] candidates =
+        [
+            Candidate(10, Romance, links: new CandidateLink(1, CandidateLinkKind.Collection)),
+            Candidate(11, Romance),
+        ];
+
+        var o = new RecommendationOptions { CollectionLinkWeight = 2, MinVoteCount = 0 };
+
+        var sequel = RecommendationEngine.Explain(watched, candidates, new HashSet<int>(), o).Candidates.Single(c => c.ItemId == 10);
+
+        Assert.Equal(new SeedContribution(1, CandidateLinkKind.Collection, 2), Assert.Single(sequel.Seeds));
+        Assert.Equal(Math.Log(3), sequel.RawCollaborative, 9);
     }
 }

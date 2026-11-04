@@ -151,7 +151,7 @@ else
                                     }
                                     @foreach (var seed in row.Seeds.OrderByDescending(s => s.Strength))
                                     {
-                                        <li>@TitleOf(seed.SeedItemId): @(seed.Collaborative ? "recommends" : "similar to") it, strength @seed.Strength.ToString("0.00")</li>
+                                        <li>@TitleOf(seed.SeedItemId): @(seed.Kind switch { CandidateLinkKind.Recommendation => "recommends", CandidateLinkKind.Similar => "similar to", _ => "same franchise as" }) it, strength @seed.Strength.ToString("0.00")</li>
                                     }
                                 </ul>
                             }

@@ -33,6 +33,9 @@ public sealed class RecommendationOptions
     /// <summary>Strength of a TMDB "similar" link relative to a "recommendations" link (1.0).</summary>
     public double SimilarLinkWeight { get; set; } = 0.5;
 
+    /// <summary>Strength of a "same TMDB collection" (franchise) link relative to a "recommendations" link (1.0).</summary>
+    public double CollectionLinkWeight { get; set; } = 1.0;
+
     /// <summary>MMR trade-off between relevance (1.0) and diversity (0.0).</summary>
     public double DiversityLambda { get; set; } = 0.7;
 

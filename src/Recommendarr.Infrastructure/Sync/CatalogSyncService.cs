@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Models;
+using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Options;
 
@@ -12,7 +13,9 @@ public sealed record CatalogSyncResult(int SeedsExpanded, int MetadataFetched);
 
 /// <summary>
 /// Pipeline steps 3–4 (minus embedding): fetches TMDB metadata for catalog items and fills the
-/// candidate pool from each watched item's recommendations/similar lists and from trending.
+/// candidate pool from each watched item's recommendations, similar titles and franchise (TMDB
+/// collection), from global lists (trending, popular, top rated, now airing), and from TMDB discover
+/// searches for each profile's favourite genres and languages.
 /// </summary>
 public sealed class CatalogSyncService(
     RecommendarrDbContext db,
@@ -22,6 +25,9 @@ public sealed class CatalogSyncService(
     ILogger<CatalogSyncService> logger)
 {
     private const int SaveBatchSize = 50;
+
+    /// <summary>TMDB list pages hold 20 results; a shorter page is the last one.</summary>
+    private const int FullPage = 20;
 
     public async Task<CatalogSyncResult> RunAsync(CancellationToken ct = default)
     {
@@ -50,25 +56,48 @@ public sealed class CatalogSyncService(
                 fetched++;
             }
 
-            var recommendations = await metadata.GetRecommendationsAsync(seed.MediaType, seed.TmdbId, ct);
+            var recommendations = new List<MediaReference>();
+            for (var page = 1; page <= tmdbOptions.Value.RecommendationPages; page++)
+            {
+                var results = await metadata.GetRecommendationsAsync(seed.MediaType, seed.TmdbId, page, ct);
+                recommendations.AddRange(results);
+                if (results.Count < FullPage)
+                    break;
+            }
             var similar = await metadata.GetSimilarAsync(seed.MediaType, seed.TmdbId, ct);
+            var collection = seed.CollectionId is { } collectionId ? await metadata.GetCollectionAsync(collectionId, ct) : [];
             var recommendationItems = await AddCandidatesAsync(catalog, recommendations, ct);
             var similarItems = await AddCandidatesAsync(catalog, similar, ct);
+            var collectionItems = await AddCandidatesAsync(catalog, collection, ct);
 
             // Links only carry ids, so new candidates must be saved before they can be linked.
             await db.SaveChangesAsync(ct);
             await ReplaceLinksAsync(seed, ItemLinkKind.Recommendation, recommendationItems, ct);
             await ReplaceLinksAsync(seed, ItemLinkKind.Similar, similarItems, ct);
+            await ReplaceLinksAsync(seed, ItemLinkKind.Collection, collectionItems, ct);
             await db.SaveChangesAsync(ct);
             seedProgress.Report(++seedsDone);
         }
 
-        logger.LogInformation("Fetching trending titles");
+        // Titles nobody's history leads to yet: new releases, big classics, what's on now.
+        logger.LogInformation("Fetching trending, popular, top rated and now airing titles");
         foreach (var type in new[] { MediaType.Movie, MediaType.Tv })
-            await AddCandidatesAsync(catalog, await metadata.GetTrendingAsync(type, ct), ct);
+        {
+            foreach (var list in Enum.GetValues<TitleList>())
+            {
+                for (var page = 1; page <= tmdbOptions.Value.ListPages; page++)
+                {
+                    var results = await metadata.GetTitleListAsync(type, list, page, ct);
+                    await AddCandidatesAsync(catalog, results, ct, listedAt: now);
+                    if (results.Count < FullPage)
+                        break;
+                }
+            }
+        }
         await db.SaveChangesAsync(ct);
+        await DiscoverAsync(catalog, now, ct);
 
-        // Everything else that is new or stale: fresh candidates, trending titles, and old entries.
+        // Everything else that is new or stale: fresh candidates, list titles, and old entries.
         var pending = await db.Items
             .Where(i => i.MetadataFetchedAt == null || i.MetadataFetchedAt < staleBefore)
             .ToListAsync(ct);
@@ -110,6 +139,7 @@ public sealed class CatalogSyncService(
             item.Popularity = m.Popularity;
             item.TvdbId = m.TvdbId ?? item.TvdbId;
             item.ImdbId = m.ImdbId ?? item.ImdbId;
+            item.CollectionId = m.CollectionId;
             item.Genres = string.Join('|', m.Genres);
             item.Keywords = string.Join('|', m.Keywords);
             item.Cast = string.Join('|', m.Cast);
@@ -118,12 +148,58 @@ public sealed class CatalogSyncService(
         item.MetadataFetchedAt = now;
     }
 
-    private static async Task<List<ItemEntity>> AddCandidatesAsync(ItemCatalog catalog, IReadOnlyList<MediaReference> refs, CancellationToken ct)
+    /// <summary>
+    /// The best-known titles of each profile's favourite genres and languages. TMDB links are thin for
+    /// TV and anime, so without this a profile's next show is often not in the pool at all.
+    /// </summary>
+    private async Task DiscoverAsync(ItemCatalog catalog, DateTimeOffset now, CancellationToken ct)
+    {
+        var watched = await db.WatchEvents.AsNoTracking()
+            .Where(w => w.Item != null)
+            .Select(w => new { w.UserId, w.Item!.Id, w.Item.MediaType, w.Item.Genres, w.Item.OriginalLanguage })
+            .Distinct()
+            .ToListAsync(ct);
+        var plans = DiscoverPlanner.Plan(
+            watched.Select(t => new WatchedTitle(t.UserId, t.MediaType, EmbeddingDocument.SplitList(t.Genres).ToList(), t.OriginalLanguage)),
+            tmdbOptions.Value.DiscoverGenres);
+        if (plans.Count == 0)
+            return;
+
+        logger.LogInformation("Discovering titles for {Count} genre and language searches", plans.Count);
+        var genreIds = new Dictionary<MediaType, IReadOnlyDictionary<string, int>>();
+        foreach (var plan in plans)
+        {
+            int? genreId = null;
+            if (plan.Genre is not null)
+            {
+                if (!genreIds.TryGetValue(plan.MediaType, out var ids))
+                    genreIds[plan.MediaType] = ids = await metadata.GetGenresAsync(plan.MediaType, ct);
+                if (!ids.TryGetValue(plan.Genre, out var id))
+                    continue; // e.g. stored under an earlier Tmdb:Language
+                genreId = id;
+            }
+
+            for (var page = 1; page <= tmdbOptions.Value.DiscoverPages; page++)
+            {
+                var results = await metadata.DiscoverAsync(plan.MediaType, new DiscoverQuery(genreId, plan.OriginalLanguage), page, ct);
+                await AddCandidatesAsync(catalog, results, ct, listedAt: now);
+                if (results.Count < FullPage)
+                    break;
+            }
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task<List<ItemEntity>> AddCandidatesAsync(
+        ItemCatalog catalog,
+        IReadOnlyList<MediaReference> refs,
+        CancellationToken ct,
+        DateTimeOffset? listedAt = null)
     {
         var items = new List<ItemEntity>(refs.Count);
         foreach (var r in refs)
         {
-            items.Add(await catalog.GetOrAddAsync(r.MediaType, r.TmdbId, () => new ItemEntity
+            var item = await catalog.GetOrAddAsync(r.MediaType, r.TmdbId, () => new ItemEntity
             {
                 TmdbId = r.TmdbId,
                 MediaType = r.MediaType,
@@ -131,7 +207,10 @@ public sealed class CatalogSyncService(
                 VoteAverage = r.VoteAverage,
                 VoteCount = r.VoteCount,
                 Popularity = r.Popularity,
-            }, ct));
+            }, ct);
+            if (listedAt is not null)
+                item.ListedAt = listedAt;
+            items.Add(item);
         }
         return items;
     }

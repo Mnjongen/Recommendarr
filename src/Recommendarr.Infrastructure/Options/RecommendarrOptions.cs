@@ -95,6 +95,18 @@ public sealed class TmdbOptions
     public string Language { get; set; } = "en-US";
 
     public TimeSpan CacheDuration { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>Pages (about 20 titles each) of TMDB recommendations fetched per watched title.</summary>
+    public int RecommendationPages { get; set; } = 2;
+
+    /// <summary>Pages fetched of each global list (trending, popular, top rated, now airing) per media type.</summary>
+    public int ListPages { get; set; } = 2;
+
+    /// <summary>Each profile's top genres (per media type) that get a TMDB discover search.</summary>
+    public int DiscoverGenres { get; set; } = 3;
+
+    /// <summary>Pages fetched per discover search (most voted first).</summary>
+    public int DiscoverPages { get; set; } = 2;
 }
 
 public sealed class SeerrOptions

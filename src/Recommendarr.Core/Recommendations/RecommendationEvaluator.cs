@@ -6,7 +6,7 @@ namespace Recommendarr.Core.Recommendations;
 public sealed record UserPlay(string UserId, PlaySignal Play);
 
 /// <summary>A catalog title the engine can't score (no vector yet), so it can still be counted as a missed case.</summary>
-public sealed record EvaluationTarget(int ItemId, MediaType MediaType, IReadOnlyList<CandidateLink> Links);
+public sealed record EvaluationTarget(int ItemId, MediaType MediaType, IReadOnlyList<CandidateLink> Links, bool Listed = false);
 
 /// <summary>
 /// One held-out title: was it recommended just before the profile first watched it?
@@ -17,6 +17,8 @@ public sealed record EvaluationTarget(int ItemId, MediaType MediaType, IReadOnly
 /// <paramref name="Linked"/> is true when a TMDB recommendation/similar link from an earlier watch points
 /// at it, i.e. catalog expansion from the profile's history could have found it.
 /// <paramref name="Embedded"/> is false when the title has no vector yet, so the engine couldn't score it at all.
+/// <paramref name="Reachable"/> is true when it is linked or came in through a global list or discover
+/// query: the catalog would hold it even if this profile had never watched it.
 /// </summary>
 public sealed record EvaluationCase(
     string UserId,
@@ -28,7 +30,8 @@ public sealed record EvaluationCase(
     double Percentile,
     bool Eligible = true,
     bool Linked = false,
-    bool Embedded = true);
+    bool Embedded = true,
+    bool Reachable = false);
 
 public sealed record EvaluationResult(IReadOnlyList<EvaluationCase> Cases, int K)
 {
@@ -48,6 +51,9 @@ public sealed record EvaluationResult(IReadOnlyList<EvaluationCase> Cases, int K
 
     /// <summary>Share of held-out titles reachable through TMDB links from the earlier history.</summary>
     public double LinkedShare => Cases.Count == 0 ? 0 : (double)Cases.Count(c => c.Linked) / Cases.Count;
+
+    /// <summary>Share of held-out titles the catalog would hold without this profile's watch: linked or listed.</summary>
+    public double ReachableShare => Cases.Count == 0 ? 0 : (double)Cases.Count(c => c.Reachable) / Cases.Count;
 
     /// <summary>The same metrics over a subset of the cases (one profile, one media type, ...).</summary>
     public EvaluationResult Where(Func<EvaluationCase, bool> predicate) => new(Cases.Where(predicate).ToList(), K);
@@ -79,7 +85,7 @@ public static class RecommendationEvaluator
         var scorable = candidates.Select(c => c.ItemId).ToHashSet();
         var targets = (unembedded ?? []).Where(t => !scorable.Contains(t.ItemId)).ToDictionary(t => t.ItemId);
         foreach (var candidate in candidates)
-            targets[candidate.ItemId] = new EvaluationTarget(candidate.ItemId, candidate.MediaType, candidate.Links);
+            targets[candidate.ItemId] = new EvaluationTarget(candidate.ItemId, candidate.MediaType, candidate.Links, candidate.Listed);
 
         // Each title the profile actually got into (not abandoned) is a test case at its first play.
         var work = plays
@@ -129,21 +135,22 @@ public static class RecommendationEvaluator
         // Catalog expansion follows every earlier play, embedded or not, finished or not.
         var excluded = history.Select(p => p.ItemId).ToHashSet();
         var linked = target.Links.Any(l => excluded.Contains(l.SeedItemId));
+        var reachable = linked || target.Listed;
         if (!embedded)
-            return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, null, 1.0, Eligible: false, linked, Embedded: false);
+            return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, null, 1.0, Eligible: false, linked, Embedded: false, Reachable: reachable);
 
         var pool = RecommendationEngine.Score(watched, candidates, excluded, options)
             .Where(s => s.Candidate.MediaType == target.MediaType)
             .ToList();
         var targetScore = pool.FirstOrDefault(s => s.Candidate.ItemId == target.ItemId);
         if (targetScore is null)
-            return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, null, 1.0, Eligible: false, linked);
+            return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, null, 1.0, Eligible: false, linked, Reachable: reachable);
 
         var rank = RecommendationEngine.Diversify(pool, options).FindIndex(s => s.Candidate.ItemId == target.ItemId) is var i and >= 0 ? i + 1 : (int?)null;
         var percentile = pool.Count < 2
             ? 1.0
             : (pool.Count(s => s.Score > targetScore.Score) +
                0.5 * (pool.Count(s => s.Score == targetScore.Score) - 1)) / (pool.Count - 1);
-        return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, rank, percentile, Eligible: true, linked);
+        return new EvaluationCase(userId, target.ItemId, target.MediaType, firstPlay, watched.Count, rank, percentile, Eligible: true, linked, Reachable: reachable);
     }
 }

@@ -25,6 +25,8 @@ public static class EvaluationExperiments
             experiments.Add(Variant(baseline, $"taste clusters max {k}", o => o.TasteClusters = k));
         foreach (var w in new[] { 0.0, 1.0 })
             experiments.Add(Variant(baseline, $"tmdb 'similar' link weight {w:0.0}", o => o.SimilarLinkWeight = w));
+        foreach (var w in new[] { 0.0, 2.0 })
+            experiments.Add(Variant(baseline, $"tmdb collection link weight {w:0.0}", o => o.CollectionLinkWeight = w));
         foreach (var l in new[] { 0.5, 0.85, 1.0 })
             experiments.Add(Variant(baseline, $"diversity lambda {l:0.00}", o => o.DiversityLambda = l));
         foreach (var votes in new[] { 0, 200 })
