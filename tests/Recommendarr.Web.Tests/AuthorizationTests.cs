@@ -183,6 +183,18 @@ public sealed class AuthorizationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Trusted_proxy_forwarded_proto_is_used_for_auth_redirects()
+    {
+        var client = _app.CreateClient(profile: null);
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.StartsWith("https://", response.Headers.Location?.AbsoluteUri);
+    }
+
+    [Fact]
     public async Task Signed_in_profiles_see_their_recommendations_page()
     {
         var html = await _app.CreateClient("1").GetStringAsync("/");
