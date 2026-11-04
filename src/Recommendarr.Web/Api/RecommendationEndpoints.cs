@@ -39,9 +39,9 @@ public static class RecommendationEndpoints
         });
 
         signedIn.MapPost("/users/{plexUserId}/telegram-link", async (
-            string plexUserId, ClaimsPrincipal user, TelegramLinkService telegram, IOptions<TelegramOptions> options, CancellationToken ct) =>
+            string plexUserId, ClaimsPrincipal user, CurrentAdminAuthorization authorization, TelegramLinkService telegram, IOptions<TelegramOptions> options, CancellationToken ct) =>
         {
-            if (!user.CanActFor(plexUserId))
+            if (!await authorization.CanActForAsync(user, plexUserId, ct))
                 return Results.Forbid();
             if (string.IsNullOrWhiteSpace(options.Value.BotToken))
                 return Results.Problem("Telegram is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
