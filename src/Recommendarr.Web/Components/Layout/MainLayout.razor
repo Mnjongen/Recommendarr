@@ -9,7 +9,8 @@
                 <NavLink href="/search">Search</NavLink>
                 <NavLink href="/telegram">Telegram</NavLink>
                 <AuthorizeView Policy="@AuthConstants.AdminPolicy" Context="admin">
-                    <NavLink href="/admin">Admin</NavLink>
+                    <NavLink href="/admin" Match="NavLinkMatch.All">Admin</NavLink>
+                    <NavLink href="/admin/quality">Quality</NavLink>
                 </AuthorizeView>
             </nav>
             <div class="profile">

@@ -16,6 +16,60 @@ namespace Recommendarr.Infrastructure.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
 
+            modelBuilder.Entity("Recommendarr.Infrastructure.Data.EvaluationRunEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Cases")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CatalogTitles")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("EligibleShare")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Experiment")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("HitRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("Hits")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("K")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("LinkedShare")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("MeanPercentile")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Mrr")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Settings")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("StartedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Users")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Experiment", "StartedAt");
+
+                    b.ToTable("EvaluationRuns", (string)null);
+                });
+
             modelBuilder.Entity("Recommendarr.Infrastructure.Data.FeedbackEntity", b =>
                 {
                     b.Property<long>("Id")

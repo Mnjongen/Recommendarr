@@ -173,6 +173,20 @@ public sealed class AuthorizationTests : IAsyncLifetime
         Assert.Equal(expected, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/admin/quality", "1", HttpStatusCode.Redirect)]
+    [InlineData("/admin/explain/1", "1", HttpStatusCode.Redirect)]
+    [InlineData("/admin/quality", "2,admin", HttpStatusCode.OK)]
+    [InlineData("/admin/explain/1", "2,admin", HttpStatusCode.OK)]
+    public async Task Quality_pages_are_admin_only(string path, string profile, HttpStatusCode expected)
+    {
+        var response = await _app.CreateClient(profile).GetAsync(path);
+
+        Assert.Equal(expected, response.StatusCode);
+        if (expected == HttpStatusCode.Redirect)
+            Assert.StartsWith("/access-denied", response.Headers.Location?.PathAndQuery);
+    }
+
     [Fact]
     public async Task Demoted_admin_loses_admin_access_and_cross_profile_access_immediately()
     {

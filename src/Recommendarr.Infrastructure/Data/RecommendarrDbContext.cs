@@ -25,6 +25,8 @@ public sealed class RecommendarrDbContext(DbContextOptions<RecommendarrDbContext
 
     public DbSet<JobRunEntity> JobRuns => Set<JobRunEntity>();
 
+    public DbSet<EvaluationRunEntity> EvaluationRuns => Set<EvaluationRunEntity>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<UserEntity>(e =>
@@ -73,6 +75,12 @@ public sealed class RecommendarrDbContext(DbContextOptions<RecommendarrDbContext
         {
             e.ToTable("JobRuns");
             e.HasIndex(x => new { x.JobName, x.StartedAt });
+        });
+
+        b.Entity<EvaluationRunEntity>(e =>
+        {
+            e.ToTable("EvaluationRuns");
+            e.HasIndex(x => new { x.Experiment, x.StartedAt });
         });
     }
 

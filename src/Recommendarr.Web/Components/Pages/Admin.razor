@@ -16,6 +16,10 @@
 <PageTitle>Admin · Recommendarr</PageTitle>
 
 <h1>Admin</h1>
+<nav class="subnav">
+    <a href="/admin/quality">Recommendation quality</a>
+    <a href="/admin/explain">Why this score</a>
+</nav>
 
 @if (_message is not null)
 {
@@ -60,7 +64,7 @@
                 @foreach (var user in _users)
                 {
                     <tr>
-                        <td>@user.Username @if (user.IsAdmin) { <span class="tag">admin</span> }</td>
+                        <td><a href="/admin/explain/@user.PlexUserId">@user.Username</a> @if (user.IsAdmin) { <span class="tag">admin</span> }</td>
                         <td>@user.Plays</td>
                         <td>@user.Recommendations</td>
                         <td>@(user.LastHistorySync?.ToLocalTime().ToString("g") ?? "never")</td>

@@ -209,3 +209,38 @@ public sealed class JobRunEntity
 
     public string? Message { get; set; }
 }
+
+/// <summary>Offline evaluation result of one experiment, so quality can be tracked as the catalog grows.</summary>
+public sealed class EvaluationRunEntity
+{
+    public long Id { get; set; }
+
+    /// <summary>Every experiment of one run shares this timestamp.</summary>
+    public DateTimeOffset StartedAt { get; set; }
+
+    public required string Experiment { get; set; }
+
+    /// <summary>The <c>RecommendationOptions</c> that were evaluated, as JSON.</summary>
+    public required string Settings { get; set; }
+
+    public int CatalogTitles { get; set; }
+
+    public int Users { get; set; }
+
+    public int Cases { get; set; }
+
+    public int Hits { get; set; }
+
+    /// <summary>List length per media type that counted as a hit.</summary>
+    public int K { get; set; }
+
+    public double HitRate { get; set; }
+
+    public double Mrr { get; set; }
+
+    public double MeanPercentile { get; set; }
+
+    public double EligibleShare { get; set; }
+
+    public double LinkedShare { get; set; }
+}

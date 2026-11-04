@@ -9,6 +9,7 @@ using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Embeddings;
+using Recommendarr.Infrastructure.Evaluation;
 using Recommendarr.Infrastructure.Http;
 using Recommendarr.Infrastructure.History;
 using Recommendarr.Infrastructure.Options;
@@ -76,6 +77,7 @@ public static class DependencyInjection
         services.AddScoped<CatalogSyncService>();
         services.AddScoped<EmbeddingService>();
         services.AddScoped<RecommendationService>();
+        services.AddScoped<RecommendationQualityService>();
 
         // Never retry a POST: a retried request could be filed twice in Seerr.
         services.AddHttpClient<ISeerrClient, SeerrClient>()

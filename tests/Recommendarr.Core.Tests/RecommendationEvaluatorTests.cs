@@ -66,4 +66,41 @@ public class RecommendationEvaluatorTests
 
         Assert.Equal(0.5, Assert.Single(result.Cases).Percentile);
     }
+
+    [Fact]
+    public void Cases_record_whether_the_title_passed_the_vote_filters_and_was_linked_from_history()
+    {
+        var vectors = Enumerable.Range(1, 5).ToDictionary(id => id, _ => Action);
+        CandidateItem[] candidates =
+        [
+            new(1, MediaType.Movie, Action, 7, 1000, []),
+            new(2, MediaType.Movie, Action, 7, 1000, []),
+            new(3, MediaType.Movie, Action, 7, 1000, []),
+            new(4, MediaType.Movie, Action, 7, 1000, [new CandidateLink(2, Collaborative: true)]),
+            new(5, MediaType.Movie, Action, 7, 3, [new CandidateLink(9, Collaborative: true)]), // obscure; linked from an unwatched title
+        ];
+        UserPlay[] plays = [Play("a", 1, 1), Play("a", 2, 2), Play("a", 3, 3), Play("a", 4, 4), Play("a", 5, 5)];
+
+        var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, new RecommendationOptions());
+
+        Assert.Equal([(4, true, true), (5, false, false)], result.Cases.Select(c => (c.ItemId, c.Eligible, c.Linked)));
+        Assert.Equal(1.0, result.Cases[1].Percentile);
+        Assert.Equal(0.5, result.EligibleShare);
+        Assert.Equal(0.5, result.LinkedShare);
+        Assert.Equal(4, Assert.Single(result.Where(c => c.Eligible).Cases).ItemId);
+    }
+
+    [Fact]
+    public void The_standard_suite_varies_one_knob_at_a_time_from_the_baseline()
+    {
+        var baseline = new RecommendationOptions { RecencyHalfLifeDays = 42 };
+
+        var suite = EvaluationExperiments.Standard(baseline);
+
+        Assert.Equal(EvaluationExperiments.BaselineName, suite[0].Name);
+        Assert.NotSame(baseline, suite[0].Options);
+        Assert.Equal(suite.Count, suite.Select(e => e.Name).Distinct().Count());
+        Assert.All(suite.Where(e => !e.Name.StartsWith("recency")), e => Assert.Equal(42, e.Options.RecencyHalfLifeDays));
+        Assert.Equal(42, baseline.RecencyHalfLifeDays);
+    }
 }

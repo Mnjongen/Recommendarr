@@ -153,4 +153,51 @@ public class RecommendationEngineTests
             """.ReplaceLineEndings(),
             doc.ReplaceLineEndings());
     }
+
+    [Fact]
+    public void Explain_breaks_every_candidate_score_into_its_weighted_components()
+    {
+        var o = new RecommendationOptions { ResultsPerType = 1, MinVoteCount = 0 };
+        WatchedItem[] watched = [new(1, Action, 1)];
+        CandidateItem[] candidates =
+        [
+            Candidate(10, Action, links: new CandidateLink(1, Collaborative: true)),
+            Candidate(11, Mix(Action, Romance, 0.5f), links: new CandidateLink(1, Collaborative: false)),
+            Candidate(12, Romance, rating: 9, votes: 10_000),
+        ];
+
+        var explanation = RecommendationEngine.Explain(watched, candidates, new HashSet<int>(), o);
+
+        Assert.Single(explanation.Centroids);
+        Assert.Equal([10, 11, 12], explanation.Candidates.Select(c => c.ItemId));
+        Assert.Equal([1, 2, 3], explanation.Candidates.Select(c => c.ScoreRank));
+        Assert.Equal([(int?)1, null, null], explanation.Candidates.Select(c => c.Rank)); // only one result per type
+        foreach (var c in explanation.Candidates)
+            Assert.Equal(o.SimilarityWeight * c.Similarity + o.CollaborativeWeight * c.Collaborative + o.QualityWeight * c.Quality, c.Score, 9);
+
+        var top = explanation.Candidates[0];
+        Assert.Equal(1.0, top.RawSimilarity, 5);
+        Assert.Equal(Math.Log(2), top.RawCollaborative, 9);
+        Assert.Equal(new SeedContribution(1, true, 1), Assert.Single(top.Seeds));
+        Assert.Equal(o.SimilarLinkWeight, Assert.Single(explanation.Candidates[1].Seeds).Strength, 9);
+        Assert.Empty(explanation.Candidates[2].Seeds);
+        Assert.True(explanation.Candidates[2].RawQuality > top.RawQuality);
+    }
+
+    [Fact]
+    public void Explain_ranks_match_Recommend()
+    {
+        var o = new RecommendationOptions { ResultsPerType = 3, MinVoteCount = 0 };
+        WatchedItem[] watched = [new(1, Action, 1), new(2, Romance, 0.5)];
+        var candidates = Enumerable.Range(10, 12)
+            .Select(i => Candidate(i, Mix(Action, i % 2 == 0 ? Romance : Documentary, (i - 10) / 12f), i % 3 == 0 ? MediaType.Tv : MediaType.Movie))
+            .ToList();
+
+        var recommended = RecommendationEngine.Recommend(watched, candidates, new HashSet<int>(), o);
+        var explained = RecommendationEngine.Explain(watched, candidates, new HashSet<int>(), o).Candidates
+            .Where(c => c.Rank is not null)
+            .OrderBy(c => c.MediaType).ThenBy(c => c.Rank);
+
+        Assert.Equal(recommended.Select(r => (r.ItemId, r.Rank)), explained.Select(c => (c.ItemId, c.Rank!.Value)));
+    }
 }
