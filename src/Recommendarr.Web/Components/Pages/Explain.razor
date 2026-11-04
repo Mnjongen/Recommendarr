@@ -133,11 +133,14 @@ else
                 @foreach (var row in Rows())
                 {
                     var t = e.Titles.GetValueOrDefault(row.ItemId);
-                    <tr class="selectable @(_expanded == row.ItemId ? "selected" : "")" @onclick="() => _expanded = _expanded == row.ItemId ? null : row.ItemId">
+                    <tr class="selectable @(_expanded == row.ItemId ? "selected" : "")" @onclick="() => Toggle(row.ItemId)">
                         <td class="num">@(row.Rank?.ToString() ?? "–")</td>
                         <td class="num">@row.ScoreRank</td>
                         <td>
-                            @(t?.Title ?? $"#{row.ItemId}") <span class="muted">@(t?.Year is { } y ? $"({y})" : "")</span>
+                            <button type="button" class="row-toggle" aria-expanded="@(_expanded == row.ItemId ? "true" : "false")"
+                                    @onclick="() => Toggle(row.ItemId)" @onclick:stopPropagation>
+                                @(t?.Title ?? $"#{row.ItemId}") <span class="muted">@(t?.Year is { } y ? $"({y})" : "")</span>
+                            </button>
                             @if (_expanded == row.ItemId)
                             {
                                 <ul class="seed-list">
@@ -226,6 +229,14 @@ else
         if (!_isAdmin || PlexUserId is null)
             return;
 
+        // Re-check on every rescore: the admin flag can be revoked while the circuit is open.
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!await AdminAuthorization.IsAdminAsync(authenticationState.User))
+        {
+            (_isAdmin, _users, _catalog, _explanation) = (false, null, null, null);
+            return;
+        }
+
         _loading = true;
         try
         {
@@ -240,6 +251,8 @@ else
             _loading = false;
         }
     }
+
+    private void Toggle(int itemId) => _expanded = _expanded == itemId ? null : itemId;
 
     private int PoolSize(MediaType type) => _explanation?.Explanation.Candidates.Count(c => c.MediaType == type) ?? 0;
 

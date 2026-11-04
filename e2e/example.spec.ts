@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type WebSocket } from '@playwright/test';
 
 test('has title', async ({ page }) => {
   await page.goto('/login');
@@ -21,15 +21,22 @@ for (const route of protectedRoutes) {
 }
 
 async function signInAs(page: Page, plexUserId: string) {
+  await gotoInteractive(page, `/__e2e/sign-in/${plexUserId}`);
+  await expect(page).toHaveURL('/');
+}
+
+/** Navigates with a full page load and waits for the Blazor circuit, so event handlers are live. */
+async function gotoInteractive(page: Page, path: string) {
   let circuitFrames = 0;
-  page.on('websocket', socket => {
+  const onSocket = (socket: WebSocket) => {
     if (socket.url().includes('/_blazor'))
       socket.on('framereceived', () => circuitFrames++);
-  });
+  };
+  page.on('websocket', onSocket);
 
-  await page.goto(`/__e2e/sign-in/${plexUserId}`);
-  await expect(page).toHaveURL('/');
+  await page.goto(path);
   await expect.poll(() => circuitFrames, { timeout: 15_000 }).toBeGreaterThan(1);
+  page.off('websocket', onSocket);
 }
 
 test('signed-in profile sees seeded recommendations and can leave feedback', async ({ page }) => {
@@ -60,6 +67,39 @@ test('admin can inspect users and sync history', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Aliceadmin', exact: true })).toContainText('admin');
   await expect(page.getByRole('cell', { name: 'Bob', exact: true })).toBeVisible();
+});
+
+test('admin can evaluate recommendation quality and pick an experiment by keyboard', async ({ page }) => {
+  await signInAs(page, '1001');
+  await gotoInteractive(page, '/admin/quality');
+
+  await expect(page.getByRole('heading', { name: 'Recommendation quality' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Alice' }).getByRole('link', { name: 'Why this score' })).toBeVisible();
+  await page.getByRole('button', { name: 'Evaluate current settings' }).click();
+
+  const experiment = page.getByRole('button', { name: 'current settings', exact: true });
+  await expect(experiment).toBeVisible({ timeout: 15_000 });
+  await experiment.focus();
+  await page.keyboard.press('Enter');
+  await expect(experiment).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { name: 'Hardest to predict' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Moon', exact: true })).toBeVisible();
+});
+
+test('admin can expand a score breakdown by keyboard', async ({ page }) => {
+  await signInAs(page, '1001');
+  await gotoInteractive(page, '/admin/explain/1001');
+
+  await expect(page.getByRole('heading', { name: 'Taste clusters' })).toBeVisible();
+  const row = page.getByRole('button', { name: /The Matrix/ });
+  await expect(row).toHaveAttribute('aria-expanded', 'false');
+  // The circuit rescores once it connects and re-renders the table, which can swallow an early key press.
+  await expect(async () => {
+    await row.focus();
+    await page.keyboard.press('Enter');
+    await expect(row).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(page.getByText('No TMDB link from anything this profile watched.')).toBeVisible();
 });
 
 test('user can search and rate a catalog title', async ({ page }) => {

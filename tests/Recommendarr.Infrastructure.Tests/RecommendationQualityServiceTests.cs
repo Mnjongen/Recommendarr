@@ -81,6 +81,35 @@ public sealed class RecommendationQualityServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Unembedded_titles_are_evaluated_as_misses_and_explained()
+    {
+        await using var db = _database.CreateContext();
+        var quality = Create(db);
+        var alice = db.Users.Single();
+        var collateral = new ItemEntity { TmdbId = 99, MediaType = MediaType.Movie, Title = "Collateral" }; // no metadata yet
+        var thief = new ItemEntity { TmdbId = 98, MediaType = MediaType.Movie, Title = "Thief" };
+        db.Items.AddRange(collateral, thief);
+        await db.SaveChangesAsync();
+        db.WatchEvents.Add(new WatchEventEntity
+        {
+            UserId = alice.Id, ItemId = collateral.Id, Title = "Collateral", MediaType = MediaType.Movie,
+            WatchedAt = T0.AddDays(-1), PercentComplete = 100, SourceKey = "Collateral",
+        });
+        await db.SaveChangesAsync();
+
+        var report = await quality.EvaluateAsync([new EvaluationExperiment(EvaluationExperiments.BaselineName, _options)]);
+        var catalog = await quality.LoadCatalogAsync();
+        var explanation = await quality.ExplainAsync(catalog, "1");
+
+        var miss = Assert.Single(Assert.Single(report.Results).Result.Cases, c => c.ItemId == collateral.Id);
+        Assert.Equal((false, false, 1.0), (miss.Embedded, miss.Eligible, miss.Percentile));
+        Assert.Equal(6, catalog.Candidates.Count);
+        Assert.False(catalog.Titles[thief.Id].Embedded);
+        Assert.Contains("Not embedded", explanation!.WhyNotScored(thief.Id));
+        Assert.Contains("Already watched", explanation.WhyNotScored(collateral.Id));
+    }
+
+    [Fact]
     public async Task Explanation_scores_the_pool_and_says_why_other_titles_are_missing()
     {
         await using var db = _database.CreateContext();

@@ -9,7 +9,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Models;
+using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
+using Recommendarr.Infrastructure.Evaluation;
 using Recommendarr.Infrastructure.Options;
 using Recommendarr.Infrastructure.Seerr;
 using Recommendarr.Infrastructure.Telegram;
@@ -50,7 +52,12 @@ builder.Services.AddSingleton<E2eMetadataSource>();
 builder.Services.AddSingleton<IMetadataSource>(services => services.GetRequiredService<E2eMetadataSource>());
 builder.Services.AddSingleton<E2eSeerrClient>();
 builder.Services.AddSingleton<ISeerrClient>(services => services.GetRequiredService<E2eSeerrClient>());
+builder.Services.AddSingleton<E2eVectorStore>();
+builder.Services.AddSingleton<IVectorStore>(services => services.GetRequiredService<E2eVectorStore>());
+builder.Services.Configure<RecommendationOptions>(options => options.MinVoteCount = 0);
 builder.Services.AddSingleton<SyncCoordinator>();
+builder.Services.AddSingleton<EvaluationCoordinator>();
+builder.Services.AddScoped<RecommendationQualityService>();
 builder.Services.AddScoped<CurrentAdminAuthorization>();
 builder.Services.AddScoped<ICurrentAdminAuthorization>(services => services.GetRequiredService<CurrentAdminAuthorization>());
 builder.Services.AddScoped<RecommendationReader>();
@@ -199,8 +206,37 @@ static async Task SeedAsync(IServiceProvider services)
         VoteAverage = 8.1,
     };
 
+    // Alice's history, so the quality dashboard and "why this score" have something to evaluate.
+    var history = new[] { "Contact", "Interstellar", "Gravity", "Moon" }
+        .Select((title, n) => new ItemEntity
+        {
+            TmdbId = 900 + n,
+            MediaType = MediaType.Movie,
+            Title = title,
+            Genres = "Science Fiction",
+            VoteAverage = 7.5,
+        })
+        .ToList();
+
     db.AddRange(alice, bob, matrix, arrival, expanse);
+    db.AddRange(history);
     await db.SaveChangesAsync();
+    db.WatchEvents.AddRange(history.Select((item, n) => new WatchEventEntity
+    {
+        UserId = alice.Id,
+        ItemId = item.Id,
+        Title = item.Title,
+        MediaType = item.MediaType,
+        WatchedAt = DateTimeOffset.UtcNow.AddDays(n - 30),
+        PercentComplete = 100,
+        SourceKey = $"e2e-{item.TmdbId}",
+    }));
+    var store = scope.ServiceProvider.GetRequiredService<E2eVectorStore>();
+    foreach (var item in history.Concat([matrix, arrival, expanse]))
+    {
+        item.EmbeddedAt = DateTimeOffset.UtcNow;
+        await store.UpsertAsync(item.Id, new float[] { 1, item.Id / 10f, item.MediaType == MediaType.Tv ? 1 : 0 });
+    }
     db.Recommendations.AddRange(
         new RecommendationEntity { User = alice, Item = matrix, Rank = 1, Reason = "Because you watched a science-fiction favorite." },
         new RecommendationEntity { User = alice, Item = arrival, Rank = 2, Reason = "A thoughtful first-contact story." },
@@ -247,6 +283,27 @@ public sealed class E2eMetadataSource : IMetadataSource
             : [];
         return Task.FromResult(results);
     }
+}
+
+public sealed class E2eVectorStore : IVectorStore
+{
+    private readonly ConcurrentDictionary<int, float[]> _vectors = new();
+
+    public Task<bool> EnsureSchemaAsync(string modelId, int dimensions, CancellationToken ct = default) => Task.FromResult(false);
+
+    public Task UpsertAsync(int itemId, ReadOnlyMemory<float> embedding, CancellationToken ct = default)
+    {
+        _vectors[itemId] = embedding.ToArray();
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyDictionary<int, float[]>> GetAsync(IEnumerable<int> itemIds, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<int, float[]>>(itemIds
+            .Where(_vectors.ContainsKey)
+            .ToDictionary(id => id, id => _vectors[id]));
+
+    public Task<IReadOnlyList<(int ItemId, float Distance)>> SearchAsync(ReadOnlyMemory<float> query, int k, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<(int ItemId, float Distance)>>([]);
 }
 
 public sealed class E2eSeerrClient : ISeerrClient

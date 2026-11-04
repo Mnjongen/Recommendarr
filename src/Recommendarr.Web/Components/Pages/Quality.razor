@@ -110,7 +110,10 @@
                     var r = row.Result;
                     var delta = baseline is null ? (double?)null : r.MeanPercentile - baseline.MeanPercentile;
                     <tr class="selectable @(row == Selected(report) ? "selected" : "")" @onclick="() => _selected = row.Experiment.Name">
-                        <td>@row.Experiment.Name</td>
+                        <td>
+                            <button type="button" class="row-toggle" aria-pressed="@(row == Selected(report) ? "true" : "false")"
+                                    @onclick="() => _selected = row.Experiment.Name" @onclick:stopPropagation>@row.Experiment.Name</button>
+                        </td>
                         <td class="num">@r.Cases.Count</td>
                         <td class="num">@r.HitRate.ToString("P1")</td>
                         <td class="num">@r.Mrr.ToString("0.000")</td>
@@ -127,7 +130,7 @@
             <dt>Hit@@K</dt><dd>Share of watched titles that were in the top K of their type just before they were watched.</dd>
             <dt>MRR</dt><dd>Mean reciprocal rank: rewards hits near the top of the list.</dd>
             <dt>Mean percentile</dt><dd>Where the watched title sat among all candidates by score. Lower is better, random is 50%. The most stable metric for comparisons; ▼ means better than the current settings.</dd>
-            <dt>Eligible</dt><dd>Share of watched titles that passed the vote filters. Anything else can never be recommended.</dd>
+            <dt>Eligible</dt><dd>Share of watched titles that were embedded and passed the vote filters. Anything else can never be recommended.</dd>
             <dt>Linked</dt><dd>Share reachable through TMDB links from earlier watches. A low value means catalog expansion from history misses what people actually watch next.</dd>
             <dt>Reachable</dt><dd>Share that is linked or came in through a global TMDB list or discover search, so the catalog would hold it even if this profile hadn't watched it. Everything else only got in because they watched it; the real hit rate for those is zero.</dd>
         </dl>
@@ -172,7 +175,7 @@
                             <td>@miss.WatchedAt.ToLocalTime().ToString("d")</td>
                             <td class="num">@miss.TrainingTitles</td>
                             <td class="num">@miss.Percentile.ToString("P0")</td>
-                            <td>@(miss.Eligible ? "yes" : $"no ({title?.VoteCount} votes, ★ {title?.VoteAverage:0.0})")</td>
+                            <td>@(miss.Eligible ? "yes" : !miss.Embedded ? "no (not embedded yet)" : $"no ({title?.VoteCount} votes, ★ {title?.VoteAverage:0.0})")</td>
                             <td>@(miss.Linked ? "yes" : "no")</td>
                             <td>@(miss.Reachable ? "yes" : "no")</td>
                         </tr>

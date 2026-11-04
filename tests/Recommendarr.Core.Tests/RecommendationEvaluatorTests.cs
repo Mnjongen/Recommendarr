@@ -91,6 +91,34 @@ public class RecommendationEvaluatorTests
     }
 
     [Fact]
+    public void Unembedded_titles_are_missed_cases_and_every_earlier_play_counts_as_a_link_seed()
+    {
+        var vectors = Enumerable.Range(1, 4).ToDictionary(id => id, _ => Action);
+        var candidates = vectors.Select(v => new CandidateItem(v.Key, MediaType.Movie, v.Value, 7, 1000, [])).ToList();
+        // 7 has no vector yet and 8 was abandoned, but both can already have expanded the catalog.
+        EvaluationTarget[] unembedded =
+        [
+            new(7, MediaType.Movie, []),
+            new(9, MediaType.Tv, [new CandidateLink(7, CandidateLinkKind.Recommendation)]),
+            new(10, MediaType.Movie, [new CandidateLink(8, CandidateLinkKind.Similar)]),
+        ];
+        UserPlay[] plays =
+        [
+            Play("a", 1, 1), Play("a", 2, 2), Play("a", 3, 3),
+            Play("a", 7, 4), Play("a", 8, 5, percent: 5), Play("a", 9, 6), Play("a", 10, 7),
+            Play("a", 11, 8), // no catalog entry at all: skipped
+        ];
+
+        var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, new RecommendationOptions(), unembedded: unembedded);
+
+        Assert.Equal(
+            [(7, MediaType.Movie, false), (9, MediaType.Tv, true), (10, MediaType.Movie, true)],
+            result.Cases.Select(c => (c.ItemId, c.MediaType, c.Linked)));
+        Assert.All(result.Cases, c => Assert.Equal((false, false, (int?)null, 1.0), (c.Embedded, c.Eligible, c.Rank, c.Percentile)));
+        Assert.Equal(3, result.Cases[0].TrainingTitles);
+    }
+
+    [Fact]
     public void The_standard_suite_varies_one_knob_at_a_time_from_the_baseline()
     {
         var baseline = new RecommendationOptions { RecencyHalfLifeDays = 42 };

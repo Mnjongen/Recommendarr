@@ -61,12 +61,12 @@ public sealed record UserExplanation(
     {
         if (Explanation.Candidates.Any(c => c.ItemId == itemId))
             return null;
-        if (!Titles.TryGetValue(itemId, out var title))
-            return "Not embedded yet, so the engine can't score it.";
         if (Inputs.Feedback.TryGetValue(itemId, out var kind))
             return kind == FeedbackKind.Like ? "Liked, so it's used as a taste seed instead." : $"Excluded by feedback ({kind}).";
         if (Inputs.Played.Contains(itemId))
             return "Already watched (or started).";
+        if (!Titles.TryGetValue(itemId, out var title) || !title.Embedded)
+            return "Not embedded yet, so the engine can't score it.";
         if (title.VoteCount < Options.MinVoteCount)
             return $"Only {title.VoteCount} TMDB votes; MinVoteCount is {Options.MinVoteCount}.";
         if (title.VoteAverage < Options.MinVoteAverage)
@@ -150,7 +150,7 @@ public sealed class RecommendationQualityService(
         foreach (var experiment in experiments)
         {
             progress?.Report($"Evaluating {experiment.Name} ({results.Count + 1}/{experiments.Count})…");
-            var result = await Task.Run(() => RecommendationEvaluator.Evaluate(plays, catalog.Vectors, catalog.Candidates, experiment.Options, ct: ct), ct);
+            var result = await Task.Run(() => RecommendationEvaluator.Evaluate(plays, catalog.Vectors, catalog.Candidates, experiment.Options, unembedded: catalog.Unembedded, ct: ct), ct);
             results.Add(new ExperimentResult(experiment, result));
             logger.LogInformation("Evaluation {Experiment}: {Hits}/{Cases} hits, MRR {Mrr:0.000}, mean percentile {Percentile:P1}",
                 experiment.Name, result.Hits, result.Cases.Count, result.Mrr, result.MeanPercentile);
