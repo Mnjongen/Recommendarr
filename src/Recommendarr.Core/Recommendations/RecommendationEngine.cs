@@ -18,13 +18,15 @@ public enum CandidateLinkKind
 /// <summary>"Seed links to candidate" edge from TMDB.</summary>
 public sealed record CandidateLink(int SeedItemId, CandidateLinkKind Kind);
 
+/// <param name="Listed">The title came in through a global TMDB list or a discover query, not only through links.</param>
 public sealed record CandidateItem(
     int ItemId,
     MediaType MediaType,
     float[] Vector,
     double VoteAverage,
     int VoteCount,
-    IReadOnlyList<CandidateLink> Links);
+    IReadOnlyList<CandidateLink> Links,
+    bool Listed = false);
 
 /// <summary>A ranked recommendation. Component scores are min-max normalised within the user's pool.</summary>
 public sealed record ScoredRecommendation(

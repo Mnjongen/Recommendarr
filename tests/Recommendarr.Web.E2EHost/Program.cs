@@ -225,6 +225,12 @@ public sealed class E2eMetadataSource : IMetadataSource
     public Task<IReadOnlyList<MediaReference>> GetCollectionAsync(int collectionId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<MediaReference>>([]);
 
+    public Task<IReadOnlyDictionary<string, int>> GetGenresAsync(MediaType type, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
+
+    public Task<IReadOnlyList<MediaReference>> DiscoverAsync(MediaType type, DiscoverQuery query, int page = 1, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<MediaReference>>([]);
+
     public Task<IReadOnlyList<MediaReference>> GetTitleListAsync(MediaType type, TitleList list, int page = 1, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<MediaReference>>([]);
 

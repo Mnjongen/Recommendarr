@@ -104,6 +104,10 @@ public sealed class TitleSearchTests : IAsyncLifetime
 
         public Task<IReadOnlyList<MediaReference>> GetCollectionAsync(int collectionId, CancellationToken ct = default) => throw new NotSupportedException();
 
+        public Task<IReadOnlyDictionary<string, int>> GetGenresAsync(MediaType type, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<MediaReference>> DiscoverAsync(MediaType type, DiscoverQuery query, int page = 1, CancellationToken ct = default) => throw new NotSupportedException();
+
         public Task<IReadOnlyList<MediaReference>> GetTitleListAsync(MediaType type, TitleList list, int page = 1, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default) => throw new NotSupportedException();

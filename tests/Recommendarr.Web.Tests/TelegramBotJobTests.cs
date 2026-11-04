@@ -232,6 +232,8 @@ public sealed class TelegramBotJobTests
         public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, int page = 1, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
         public Task<IReadOnlyList<MediaReference>> GetSimilarAsync(MediaType type, int tmdbId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
         public Task<IReadOnlyList<MediaReference>> GetCollectionAsync(int collectionId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
+        public Task<IReadOnlyDictionary<string, int>> GetGenresAsync(MediaType type, CancellationToken ct = default) => Task.FromResult<IReadOnlyDictionary<string, int>>(new Dictionary<string, int>());
+        public Task<IReadOnlyList<MediaReference>> DiscoverAsync(MediaType type, DiscoverQuery query, int page = 1, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
         public Task<IReadOnlyList<MediaReference>> GetTitleListAsync(MediaType type, TitleList list, int page = 1, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<MediaReference>>([]);
         public Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default) => Task.FromResult<int?>(null);
         public Task<int?> SearchTmdbIdAsync(MediaType type, string title, int? year, CancellationToken ct = default) => Task.FromResult<int?>(null);

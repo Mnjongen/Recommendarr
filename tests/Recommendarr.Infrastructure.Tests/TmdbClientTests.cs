@@ -156,6 +156,28 @@ public sealed class TmdbClientTests : IDisposable
     }
 
     [Fact]
+    public async Task GetGenres_maps_names_to_ids()
+    {
+        Respond("genre/tv/list", """{ "genres": [{ "id": 16, "name": "Animation" }, { "id": 10759, "name": "Action & Adventure" }] }""");
+
+        var genres = await _client.GetGenresAsync(MediaType.Tv);
+
+        Assert.Equal(16, genres["Animation"]);
+        Assert.Equal(10759, genres["Action & Adventure"]);
+    }
+
+    [Fact]
+    public async Task Discover_asks_for_the_most_voted_titles_of_a_genre_and_language()
+    {
+        Respond("discover/tv", """{ "results": [{ "id": 37854, "name": "One Piece" }] }""",
+            ("sort_by", "vote_count.desc"), ("with_genres", "16"), ("with_original_language", "ja"), ("page", "2"));
+
+        var refs = await _client.DiscoverAsync(MediaType.Tv, new DiscoverQuery(16, "ja"), page: 2);
+
+        Assert.Equal((37854, MediaType.Tv), (Assert.Single(refs).TmdbId, Assert.Single(refs).MediaType));
+    }
+
+    [Fact]
     public async Task SearchTmdbId_accepts_only_an_exact_title_match()
     {
         Respond("search/movie", """

@@ -101,7 +101,7 @@
             <thead>
                 <tr>
                     <th>Experiment</th><th class="num">Cases</th><th class="num">Hit@@@report.Results[0].Result.K</th><th class="num">MRR</th>
-                    <th class="num">Mean percentile</th><th class="num">vs current</th><th class="num">Eligible</th><th class="num">Linked</th>
+                    <th class="num">Mean percentile</th><th class="num">vs current</th><th class="num">Eligible</th><th class="num">Linked</th><th class="num">Reachable</th>
                 </tr>
             </thead>
             <tbody>
@@ -118,6 +118,7 @@
                         <td class="num @(delta < -0.001 ? "better" : delta > 0.001 ? "worse" : "")">@(delta is { } d && row.Result != baseline ? $"{(d < 0 ? "▼" : "▲")} {Math.Abs(d):P1}" : "")</td>
                         <td class="num">@r.EligibleShare.ToString("P0")</td>
                         <td class="num">@r.LinkedShare.ToString("P0")</td>
+                        <td class="num">@r.ReachableShare.ToString("P0")</td>
                     </tr>
                 }
             </tbody>
@@ -128,6 +129,7 @@
             <dt>Mean percentile</dt><dd>Where the watched title sat among all candidates by score. Lower is better, random is 50%. The most stable metric for comparisons; ▼ means better than the current settings.</dd>
             <dt>Eligible</dt><dd>Share of watched titles that passed the vote filters. Anything else can never be recommended.</dd>
             <dt>Linked</dt><dd>Share reachable through TMDB links from earlier watches. A low value means catalog expansion from history misses what people actually watch next.</dd>
+            <dt>Reachable</dt><dd>Share that is linked or came in through a global TMDB list or discover search, so the catalog would hold it even if this profile hadn't watched it. Everything else only got in because they watched it; the real hit rate for those is zero.</dd>
         </dl>
 
         @if (Selected(report) is { } selected)
@@ -135,7 +137,7 @@
             <h2 style="margin-top: 1.5rem">@selected.Experiment.Name</h2>
             <table>
                 <thead>
-                    <tr><th>Segment</th><th class="num">Cases</th><th class="num">Hits</th><th class="num">MRR</th><th class="num">Mean percentile</th><th class="num">Eligible</th><th class="num">Linked</th></tr>
+                    <tr><th>Segment</th><th class="num">Cases</th><th class="num">Hits</th><th class="num">MRR</th><th class="num">Mean percentile</th><th class="num">Eligible</th><th class="num">Linked</th><th class="num">Reachable</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var (segment, r) in Segments(report, selected.Result))
@@ -148,6 +150,7 @@
                             <td class="num">@r.MeanPercentile.ToString("P1")</td>
                             <td class="num">@r.EligibleShare.ToString("P0")</td>
                             <td class="num">@r.LinkedShare.ToString("P0")</td>
+                            <td class="num">@r.ReachableShare.ToString("P0")</td>
                         </tr>
                     }
                 </tbody>
@@ -157,7 +160,7 @@
             <p class="muted">Watched titles the engine ranked lowest. Ineligible ones show what the vote filters throw away; unlinked ones show gaps in catalog expansion.</p>
             <table>
                 <thead>
-                    <tr><th>Title</th><th>Profile</th><th>Watched</th><th class="num">History</th><th class="num">Percentile</th><th>Eligible</th><th>Linked</th></tr>
+                    <tr><th>Title</th><th>Profile</th><th>Watched</th><th class="num">History</th><th class="num">Percentile</th><th>Eligible</th><th>Linked</th><th>Reachable</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var miss in selected.Result.Cases.OrderByDescending(x => x.Percentile).ThenByDescending(x => x.WatchedAt).Take(25))
@@ -171,6 +174,7 @@
                             <td class="num">@miss.Percentile.ToString("P0")</td>
                             <td>@(miss.Eligible ? "yes" : $"no ({title?.VoteCount} votes, ★ {title?.VoteAverage:0.0})")</td>
                             <td>@(miss.Linked ? "yes" : "no")</td>
+                            <td>@(miss.Reachable ? "yes" : "no")</td>
                         </tr>
                     }
                 </tbody>
@@ -188,7 +192,7 @@
             <thead>
                 <tr>
                     <th>Run</th><th class="num">Catalog titles</th><th class="num">Profiles</th><th class="num">Cases</th><th class="num">Hit@@K</th>
-                    <th class="num">MRR</th><th class="num">Mean percentile</th><th class="num">Eligible</th><th class="num">Linked</th>
+                    <th class="num">MRR</th><th class="num">Mean percentile</th><th class="num">Eligible</th><th class="num">Linked</th><th class="num">Reachable</th>
                 </tr>
             </thead>
             <tbody>
@@ -204,6 +208,7 @@
                         <td class="num">@run.MeanPercentile.ToString("P1")</td>
                         <td class="num">@run.EligibleShare.ToString("P0")</td>
                         <td class="num">@run.LinkedShare.ToString("P0")</td>
+                        <td class="num">@run.ReachableShare.ToString("P0")</td>
                     </tr>
                 }
             </tbody>

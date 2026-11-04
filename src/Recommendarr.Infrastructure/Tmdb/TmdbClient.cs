@@ -95,6 +95,25 @@ public sealed class TmdbClient : IMetadataSource
         return GetListAsync(type, $"{path}?page={page}", ct);
     }
 
+    public async Task<IReadOnlyDictionary<string, int>> GetGenresAsync(MediaType type, CancellationToken ct = default)
+    {
+        var genres = await GetAsync<GenreListDto>($"genre/{PathFor(type)}/list", ct);
+        return (genres?.Genres ?? [])
+            .Where(g => !string.IsNullOrWhiteSpace(g.Name))
+            .GroupBy(g => g.Name!.Trim())
+            .ToDictionary(g => g.Key, g => g.First().Id);
+    }
+
+    public Task<IReadOnlyList<MediaReference>> DiscoverAsync(MediaType type, DiscoverQuery query, int page = 1, CancellationToken ct = default)
+    {
+        var path = $"discover/{PathFor(type)}?sort_by=vote_count.desc&page={page}";
+        if (query.GenreId is { } genre)
+            path += $"&with_genres={genre}";
+        if (!string.IsNullOrWhiteSpace(query.OriginalLanguage))
+            path += $"&with_original_language={Uri.EscapeDataString(query.OriginalLanguage)}";
+        return GetListAsync(type, path, ct);
+    }
+
     public async Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default)
     {
         if (tvdbId is { } tvdb && await FindAsync(type, tvdb.ToString(CultureInfo.InvariantCulture), "tvdb_id", ct) is { } fromTvdb)
@@ -200,6 +219,17 @@ public sealed class TmdbClient : IMetadataSource
     private sealed class CollectionRefDto
     {
         public int Id { get; init; }
+    }
+
+    private sealed class GenreListDto
+    {
+        public List<GenreDto>? Genres { get; init; }
+    }
+
+    private sealed class GenreDto
+    {
+        public int Id { get; init; }
+        public string? Name { get; init; }
     }
 
     private sealed class CollectionDto

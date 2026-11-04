@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Models;
+using Recommendarr.Core.Recommendations;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Options;
 
@@ -13,7 +14,8 @@ public sealed record CatalogSyncResult(int SeedsExpanded, int MetadataFetched);
 /// <summary>
 /// Pipeline steps 3–4 (minus embedding): fetches TMDB metadata for catalog items and fills the
 /// candidate pool from each watched item's recommendations, similar titles and franchise (TMDB
-/// collection), and from global lists (trending, popular, top rated, now airing).
+/// collection), from global lists (trending, popular, top rated, now airing), and from TMDB discover
+/// searches for each profile's favourite genres and languages.
 /// </summary>
 public sealed class CatalogSyncService(
     RecommendarrDbContext db,
@@ -86,13 +88,14 @@ public sealed class CatalogSyncService(
                 for (var page = 1; page <= tmdbOptions.Value.ListPages; page++)
                 {
                     var results = await metadata.GetTitleListAsync(type, list, page, ct);
-                    await AddCandidatesAsync(catalog, results, ct);
+                    await AddCandidatesAsync(catalog, results, ct, listedAt: now);
                     if (results.Count < FullPage)
                         break;
                 }
             }
         }
         await db.SaveChangesAsync(ct);
+        await DiscoverAsync(catalog, now, ct);
 
         // Everything else that is new or stale: fresh candidates, list titles, and old entries.
         var pending = await db.Items
@@ -145,12 +148,58 @@ public sealed class CatalogSyncService(
         item.MetadataFetchedAt = now;
     }
 
-    private static async Task<List<ItemEntity>> AddCandidatesAsync(ItemCatalog catalog, IReadOnlyList<MediaReference> refs, CancellationToken ct)
+    /// <summary>
+    /// The best-known titles of each profile's favourite genres and languages. TMDB links are thin for
+    /// TV and anime, so without this a profile's next show is often not in the pool at all.
+    /// </summary>
+    private async Task DiscoverAsync(ItemCatalog catalog, DateTimeOffset now, CancellationToken ct)
+    {
+        var watched = await db.WatchEvents.AsNoTracking()
+            .Where(w => w.Item != null)
+            .Select(w => new { w.UserId, w.Item!.Id, w.Item.MediaType, w.Item.Genres, w.Item.OriginalLanguage })
+            .Distinct()
+            .ToListAsync(ct);
+        var plans = DiscoverPlanner.Plan(
+            watched.Select(t => new WatchedTitle(t.UserId, t.MediaType, EmbeddingDocument.SplitList(t.Genres).ToList(), t.OriginalLanguage)),
+            tmdbOptions.Value.DiscoverGenres);
+        if (plans.Count == 0)
+            return;
+
+        logger.LogInformation("Discovering titles for {Count} genre and language searches", plans.Count);
+        var genreIds = new Dictionary<MediaType, IReadOnlyDictionary<string, int>>();
+        foreach (var plan in plans)
+        {
+            int? genreId = null;
+            if (plan.Genre is not null)
+            {
+                if (!genreIds.TryGetValue(plan.MediaType, out var ids))
+                    genreIds[plan.MediaType] = ids = await metadata.GetGenresAsync(plan.MediaType, ct);
+                if (!ids.TryGetValue(plan.Genre, out var id))
+                    continue; // e.g. stored under an earlier Tmdb:Language
+                genreId = id;
+            }
+
+            for (var page = 1; page <= tmdbOptions.Value.DiscoverPages; page++)
+            {
+                var results = await metadata.DiscoverAsync(plan.MediaType, new DiscoverQuery(genreId, plan.OriginalLanguage), page, ct);
+                await AddCandidatesAsync(catalog, results, ct, listedAt: now);
+                if (results.Count < FullPage)
+                    break;
+            }
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task<List<ItemEntity>> AddCandidatesAsync(
+        ItemCatalog catalog,
+        IReadOnlyList<MediaReference> refs,
+        CancellationToken ct,
+        DateTimeOffset? listedAt = null)
     {
         var items = new List<ItemEntity>(refs.Count);
         foreach (var r in refs)
         {
-            items.Add(await catalog.GetOrAddAsync(r.MediaType, r.TmdbId, () => new ItemEntity
+            var item = await catalog.GetOrAddAsync(r.MediaType, r.TmdbId, () => new ItemEntity
             {
                 TmdbId = r.TmdbId,
                 MediaType = r.MediaType,
@@ -158,7 +207,10 @@ public sealed class CatalogSyncService(
                 VoteAverage = r.VoteAverage,
                 VoteCount = r.VoteCount,
                 Popularity = r.Popularity,
-            }, ct));
+            }, ct);
+            if (listedAt is not null)
+                item.ListedAt = listedAt;
+            items.Add(item);
         }
         return items;
     }

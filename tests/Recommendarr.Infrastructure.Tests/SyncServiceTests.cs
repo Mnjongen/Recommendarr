@@ -156,6 +156,30 @@ public sealed class SyncServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Catalog_sync_discovers_the_best_known_titles_of_a_profiles_genres_and_languages()
+    {
+        _history.Users.Add(new PlexUser("1", "alice"));
+        _history.Events.Add(Play("1", MediaType.Tv, "Frieren", "a", tmdb: 209867));
+        _history.Events.Add(Play("1", MediaType.Tv, "Dr. Stone", "b", tmdb: 86031));
+        await SyncHistoryAsync();
+
+        _metadata.Details[(MediaType.Tv, 209867)] = Metadata(MediaType.Tv, 209867, "Frieren", "Animation") with { OriginalLanguage = "ja" };
+        _metadata.Details[(MediaType.Tv, 86031)] = Metadata(MediaType.Tv, 86031, "Dr. Stone", "Animation") with { OriginalLanguage = "ja" };
+        _metadata.Genres[MediaType.Tv] = new() { ["Animation"] = 16 };
+        _metadata.Discover[(MediaType.Tv, new DiscoverQuery(16, "ja"))] = [Ref(MediaType.Tv, 37854, "One Piece")];
+        _metadata.Trending[MediaType.Movie] = [Ref(MediaType.Movie, 155, "The Dark Knight")];
+
+        await SyncCatalogAsync();
+
+        Assert.Equal([new DiscoverQuery(16, null), new DiscoverQuery(16, "ja")], _metadata.DiscoverCalls.Select(c => c.Query));
+        await using var db = _database.CreateContext();
+        var items = await db.Items.ToDictionaryAsync(i => i.TmdbId);
+        Assert.Equal(T0, items[37854].ListedAt);
+        Assert.Equal(T0, items[155].ListedAt);
+        Assert.Null(items[209867].ListedAt); // only watched, never listed
+    }
+
+    [Fact]
     public async Task Catalog_sync_skips_fresh_items_and_refreshes_stale_ones()
     {
         _history.Users.Add(new PlexUser("1", "alice"));

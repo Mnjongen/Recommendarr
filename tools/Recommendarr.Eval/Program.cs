@@ -63,18 +63,18 @@ List<(string Name, string Vectors, RecommendationOptions Options)> experiments =
 foreach (var name in documentVariants.Keys)
     experiments.Add(($"embedding text: {name}", name, new RecommendationOptions()));
 
-Console.WriteLine($"{"experiment",-36} {"hits",8} {"hit@25",7} {"MRR",6} {"pct",6} {"elig",5} {"link",5}   per profile (hits, mean percentile)");
+Console.WriteLine($"{"experiment",-36} {"hits",8} {"hit@25",7} {"MRR",6} {"pct",6} {"elig",5} {"link",5} {"reach",5}   per profile (hits, mean percentile)");
 foreach (var (name, vectorsName, options) in experiments)
 {
     var vectors = vectorSets[vectorsName];
     var candidates = items
         .Where(i => vectors.ContainsKey(i.Id))
         .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount,
-            links[i.Id].Select(RecommendationInputs.ToCandidateLink).ToList()))
+            links[i.Id].Select(RecommendationInputs.ToCandidateLink).ToList(), i.ListedAt != null))
         .ToList();
     var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, options);
     var perUser = string.Join(", ", result.Cases.GroupBy(c => c.UserId).Select(g => $"{g.Key} {g.Count(c => c.Rank is not null)}/{g.Count()} {g.Average(c => c.Percentile):P0}"));
-    Console.WriteLine($"{name,-36} {result.Hits,3}/{result.Cases.Count,-4} {result.HitRate,7:P0} {result.Mrr,6:0.000} {result.MeanPercentile,6:P1} {result.EligibleShare,5:P0} {result.LinkedShare,5:P0}   {perUser}");
+    Console.WriteLine($"{name,-36} {result.Hits,3}/{result.Cases.Count,-4} {result.HitRate,7:P0} {result.Mrr,6:0.000} {result.MeanPercentile,6:P1} {result.EligibleShare,5:P0} {result.LinkedShare,5:P0} {result.ReachableShare,5:P0}   {perUser}");
 }
 
 static string Document(ItemEntity i, bool title, bool cast) => EmbeddingDocument.Build(

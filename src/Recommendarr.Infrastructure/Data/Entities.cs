@@ -103,6 +103,9 @@ public sealed class ItemEntity
     /// <summary>TMDB collection (franchise) the movie belongs to, if any.</summary>
     public int? CollectionId { get; set; }
 
+    /// <summary>Last time a global TMDB list or discover search returned it (it's in the pool without any link).</summary>
+    public DateTimeOffset? ListedAt { get; set; }
+
     /// <summary>Pipe-separated lists, used to build the embedding document.</summary>
     public string Genres { get; set; } = "";
 
@@ -247,4 +250,6 @@ public sealed class EvaluationRunEntity
     public double EligibleShare { get; set; }
 
     public double LinkedShare { get; set; }
+
+    public double ReachableShare { get; set; }
 }

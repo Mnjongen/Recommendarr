@@ -35,6 +35,12 @@ internal sealed class FakeMetadataSource : IMetadataSource
 
     public Dictionary<int, List<MediaReference>> Collections { get; } = [];
 
+    public Dictionary<MediaType, Dictionary<string, int>> Genres { get; } = [];
+
+    public Dictionary<(MediaType, DiscoverQuery), List<MediaReference>> Discover { get; } = [];
+
+    public List<(MediaType Type, DiscoverQuery Query)> DiscoverCalls { get; } = [];
+
     public List<(MediaType Type, int TmdbId, int Page)> RecommendationCalls { get; } = [];
 
     public Dictionary<(int? TvdbId, string? ImdbId), int> Find { get; } = [];
@@ -66,6 +72,15 @@ internal sealed class FakeMetadataSource : IMetadataSource
     {
         var results = list == TitleList.Trending ? Trending.GetValueOrDefault(type) : Lists.GetValueOrDefault((type, list));
         return Task.FromResult<IReadOnlyList<MediaReference>>(page == 1 ? results ?? [] : []);
+    }
+
+    public Task<IReadOnlyDictionary<string, int>> GetGenresAsync(MediaType type, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, int>>(Genres.GetValueOrDefault(type) ?? []);
+
+    public Task<IReadOnlyList<MediaReference>> DiscoverAsync(MediaType type, DiscoverQuery query, int page = 1, CancellationToken ct = default)
+    {
+        DiscoverCalls.Add((type, query));
+        return Task.FromResult<IReadOnlyList<MediaReference>>(page == 1 ? Discover.GetValueOrDefault((type, query)) ?? [] : []);
     }
 
     public Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default) =>

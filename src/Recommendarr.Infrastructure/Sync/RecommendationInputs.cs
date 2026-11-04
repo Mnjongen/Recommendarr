@@ -7,7 +7,7 @@ using Recommendarr.Infrastructure.Data;
 namespace Recommendarr.Infrastructure.Sync;
 
 /// <summary>Display data for an embedded catalog title.</summary>
-public sealed record CatalogTitle(int Id, MediaType MediaType, string Title, int? Year, double VoteAverage, int VoteCount);
+public sealed record CatalogTitle(int Id, MediaType MediaType, string Title, int? Year, double VoteAverage, int VoteCount, bool Listed);
 
 /// <summary>The embedded catalog as the engine sees it. Shared by every user, so load it once per run.</summary>
 public sealed record CatalogSnapshot(
@@ -29,7 +29,7 @@ public static class RecommendationInputs
     {
         var items = await db.Items.AsNoTracking()
             .Where(i => i.EmbeddedAt != null)
-            .Select(i => new CatalogTitle(i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount))
+            .Select(i => new CatalogTitle(i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, i.ListedAt != null))
             .ToListAsync(ct);
         var vectors = await store.GetAsync(items.Select(i => i.Id), ct);
         var links = (await db.ItemLinks.AsNoTracking().ToListAsync(ct)).ToLookup(l => l.TargetItemId);
@@ -41,7 +41,8 @@ public static class RecommendationInputs
                 vectors[i.Id],
                 i.VoteAverage,
                 i.VoteCount,
-                links[i.Id].Select(ToCandidateLink).ToList()))
+                links[i.Id].Select(ToCandidateLink).ToList(),
+                i.Listed))
             .ToList();
         return new CatalogSnapshot(candidates, vectors, items.ToDictionary(i => i.Id));
     }

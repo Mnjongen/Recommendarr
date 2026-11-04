@@ -172,6 +172,7 @@ public sealed class RecommendationQualityService(
             MeanPercentile = r.Result.MeanPercentile,
             EligibleShare = r.Result.EligibleShare,
             LinkedShare = r.Result.LinkedShare,
+            ReachableShare = r.Result.ReachableShare,
         }));
         await db.SaveChangesAsync(ct);
 
