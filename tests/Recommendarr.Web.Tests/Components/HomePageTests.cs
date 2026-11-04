@@ -14,10 +14,12 @@ namespace Recommendarr.Web.Tests.Components;
 public sealed class HomePageTests : BunitContext
 {
     private readonly FakePageService _page = new();
+    private readonly FakeAdminAuthorization _authorization = new();
 
     public HomePageTests()
     {
         Services.AddSingleton<IRecommendationsPageService>(_page);
+        Services.AddSingleton<ICurrentAdminAuthorization>(_authorization);
         _page.Recommendations["1"] =
         [
             Item(603, "The Matrix"),
@@ -31,9 +33,9 @@ public sealed class HomePageTests : BunitContext
     {
         var auth = AddAuthorization();
         auth.SetAuthorized(plexUserId);
-        auth.SetClaims(new Claim(ClaimTypes.NameIdentifier, plexUserId), new Claim(AuthConstants.StageClaim, AuthConstants.ProfileStage));
         if (admin)
             auth.SetRoles(AuthConstants.AdminRole);
+        auth.SetClaims(new Claim(ClaimTypes.NameIdentifier, plexUserId), new Claim(AuthConstants.StageClaim, AuthConstants.ProfileStage));
     }
 
     private static List<string> Titles(IRenderedComponent<Home> cut) => cut.FindAll(".rec-card h3").Select(h => h.FirstChild!.TextContent.Trim()).ToList();
@@ -116,6 +118,93 @@ public sealed class HomePageTests : BunitContext
     }
 
     [Fact]
+    public void A_demoted_admin_claim_does_not_load_the_profile_list()
+    {
+        _authorization.IsCurrentAdmin = false;
+        SignIn("1", admin: true);
+
+        var cut = Render<Home>();
+
+        Assert.Empty(cut.FindAll("select"));
+    }
+
+    [Fact]
+    public void A_demoted_admin_cannot_keep_viewing_another_profile()
+    {
+        SignIn("1", admin: true);
+        var cut = Render<Home>();
+        cut.Find("select").Change("2");
+        cut.WaitForAssertion(() => Assert.Equal("Recommended for bob", cut.Find("h1").TextContent));
+
+        _authorization.IsCurrentAdmin = false;
+        cut.Find("select").Change("2");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("Recommended for you", cut.Find("h1").TextContent);
+            Assert.Empty(cut.FindAll("select"));
+            Assert.Equal("1", _page.LoadedProfiles.Last());
+        });
+    }
+
+    [Fact]
+    public void A_demoted_admin_viewing_their_own_profile_loses_the_profile_list()
+    {
+        SignIn("1", admin: true);
+        var cut = Render<Home>();
+        _authorization.IsCurrentAdmin = false;
+
+        cut.Find("select").Change("1");
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("select")));
+    }
+
+    [Theory]
+    [InlineData("request")]
+    [InlineData("feedback")]
+    public void A_demoted_admin_cannot_act_for_another_profile(string action)
+    {
+        SignIn("1", admin: true);
+        var cut = Render<Home>();
+        cut.Find("select").Change("2");
+        cut.WaitForAssertion(() => Assert.Equal("Recommended for bob", cut.Find("h1").TextContent));
+
+        _authorization.IsCurrentAdmin = false;
+        if (action == "request")
+            cut.Find(".request").Click();
+        else
+            cut.Find(".feedback-like").Click();
+
+        Assert.Empty(_page.Requests);
+        Assert.Empty(_page.Feedback);
+        cut.WaitForAssertion(() => Assert.Equal("Recommended for you", cut.Find("h1").TextContent));
+    }
+
+    [Theory]
+    [InlineData("request")]
+    [InlineData("feedback")]
+    public void A_profile_change_during_authorization_cancels_the_action(string action)
+    {
+        SignIn("1", admin: true);
+        var cut = Render<Home>();
+        cut.Find("select").Change("2");
+        cut.WaitForAssertion(() => Assert.Equal("Recommended for bob", cut.Find("h1").TextContent));
+
+        var authorization = new TaskCompletionSource<bool>();
+        _authorization.NextCanActFor = authorization;
+        cut.Find($".{(action == "request" ? "request" : "feedback-like")}").Click();
+        cut.WaitForAssertion(() => Assert.Equal(1, _authorization.PendingCanActForChecks));
+        cut.Find("select").Change("1");
+        authorization.SetResult(true);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(_page.Requests);
+            Assert.Empty(_page.Feedback);
+        });
+    }
+
+    [Fact]
     public void Without_recommendations_it_explains_when_they_will_appear()
     {
         SignIn("3");
@@ -166,6 +255,8 @@ public sealed class HomePageTests : BunitContext
     {
         public Dictionary<string, List<RecommendationView>> Recommendations { get; } = [];
 
+        public List<string> LoadedProfiles { get; } = [];
+
         public List<(string, MediaType, int)> Requests { get; } = [];
 
         public List<(string, MediaType, int, FeedbackKind)> Feedback { get; } = [];
@@ -179,8 +270,11 @@ public sealed class HomePageTests : BunitContext
         public Task<IReadOnlyList<ProfileSummary>> GetProfilesAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ProfileSummary>>([new("1", "alice"), new("2", "bob")]);
 
-        public Task<IReadOnlyList<RecommendationView>> GetRecommendationsAsync(string plexUserId, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<RecommendationView>>(Recommendations.GetValueOrDefault(plexUserId) ?? []);
+        public Task<IReadOnlyList<RecommendationView>> GetRecommendationsAsync(string plexUserId, CancellationToken ct = default)
+        {
+            LoadedProfiles.Add(plexUserId);
+            return Task.FromResult<IReadOnlyList<RecommendationView>>(Recommendations.GetValueOrDefault(plexUserId) ?? []);
+        }
 
         public Task<RequestOutcome> RequestAsync(string plexUserId, MediaType type, int tmdbId, CancellationToken ct = default)
         {
@@ -202,6 +296,30 @@ public sealed class HomePageTests : BunitContext
         {
             Searches.Add(query);
             return Task.FromResult<IReadOnlyList<RecommendationView>>(Recommendations.GetValueOrDefault("search") ?? []);
+        }
+    }
+
+    private sealed class FakeAdminAuthorization : ICurrentAdminAuthorization
+    {
+        public bool IsCurrentAdmin { get; set; } = true;
+
+        public TaskCompletionSource<bool>? NextCanActFor { get; set; }
+
+        public int PendingCanActForChecks { get; private set; }
+
+        public Task<bool> IsAdminAsync(ClaimsPrincipal user, CancellationToken ct = default) =>
+            Task.FromResult(IsCurrentAdmin && user.IsInRole(AuthConstants.AdminRole));
+
+        public Task<bool> CanActForAsync(ClaimsPrincipal user, string plexUserId, CancellationToken ct = default)
+        {
+            if (NextCanActFor is { } next)
+            {
+                NextCanActFor = null;
+                PendingCanActForChecks++;
+                return next.Task;
+            }
+
+            return Task.FromResult(user.PlexUserId() == plexUserId || IsCurrentAdmin && user.IsInRole(AuthConstants.AdminRole));
         }
     }
 }

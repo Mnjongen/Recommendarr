@@ -13,9 +13,11 @@ services:
       - ./config:/config
     environment:
       # Required for internet-facing deployments: terminate TLS at a reverse proxy,
-      # then set both values to the public hostname.
+      # then set these values to the public hostname and proxy's IP as seen by this container.
+      # The proxy must set X-Forwarded-For and X-Forwarded-Proto (https).
       # AllowedHosts: recommendarr.example.com
       # Recommendarr__Web__PublicUrl: https://recommendarr.example.com
+      # Recommendarr__Web__TrustedProxies__0: 172.20.0.2
       # History source: Tautulli or Plex
       Recommendarr__History__Provider: Tautulli
       Recommendarr__Tautulli__BaseUrl: http://tautulli:8181

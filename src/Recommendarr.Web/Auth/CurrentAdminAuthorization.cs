@@ -7,7 +7,14 @@ namespace Recommendarr.Web.Auth;
 
 public sealed class CurrentAdminRequirement : IAuthorizationRequirement;
 
-public sealed class CurrentAdminAuthorization(IServiceScopeFactory scopes)
+public interface ICurrentAdminAuthorization
+{
+    Task<bool> IsAdminAsync(ClaimsPrincipal user, CancellationToken ct = default);
+
+    Task<bool> CanActForAsync(ClaimsPrincipal user, string plexUserId, CancellationToken ct = default);
+}
+
+public sealed class CurrentAdminAuthorization(IServiceScopeFactory scopes) : ICurrentAdminAuthorization
 {
     public async Task<bool> IsAdminAsync(ClaimsPrincipal user, CancellationToken ct = default)
     {

@@ -1,8 +1,11 @@
+using System.Net;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Recommendarr.Infrastructure;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Options;
@@ -24,10 +27,20 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
 builder.Services.Configure<WebOptions>(builder.Configuration.GetSection(WebOptions.Section));
+builder.Services.AddOptions<ForwardedHeadersOptions>()
+    .Configure<IOptions<WebOptions>>((options, configuredWebOptions) =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        foreach (var address in configuredWebOptions.Value.TrustedProxies)
+            options.KnownProxies.Add(IPAddress.Parse(address));
+    });
 builder.Services.AddSingleton<SyncCoordinator>();
 builder.Services.AddHostedService<SyncJob>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<CurrentAdminAuthorization>();
+builder.Services.AddScoped<ICurrentAdminAuthorization>(sp => sp.GetRequiredService<CurrentAdminAuthorization>());
 builder.Services.AddScoped<RecommendationReader>();
 builder.Services.AddScoped<RecommendationFeedbackService>();
 builder.Services.AddScoped<TitleSearchService>();
@@ -74,6 +87,10 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IAuthorizationHandler, CurrentAdminAuthorizationHandler>();
 
 var app = builder.Build();
+
+var webOptions = app.Services.GetRequiredService<IOptions<WebOptions>>().Value;
+if (webOptions.TrustedProxies.Length > 0)
+    app.UseForwardedHeaders();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
