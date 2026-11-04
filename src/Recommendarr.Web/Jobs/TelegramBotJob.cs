@@ -15,10 +15,13 @@ namespace Recommendarr.Web.Jobs;
 
 public sealed class TelegramBotJob(
     IServiceScopeFactory scopes,
+    IHttpClientFactory httpClientFactory,
     IOptions<TelegramOptions> options,
     TimeProvider time,
     ILogger<TelegramBotJob> logger) : BackgroundService
 {
+    public const string HttpClientName = "Telegram";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var token = options.Value.BotToken;
@@ -28,7 +31,7 @@ public sealed class TelegramBotJob(
             return;
         }
 
-        var bot = new TelegramBotClient(token);
+        var bot = new TelegramBotClient(token, httpClientFactory.CreateClient(HttpClientName));
         var offset = 0;
         var nextDigestCheck = DateTimeOffset.MinValue;
         while (!stoppingToken.IsCancellationRequested)
@@ -159,7 +162,7 @@ public sealed class TelegramBotJob(
             .GroupBy(item => item.MediaType)
             .SelectMany(group => group.Take(3))
             .ToList();
-        await SendRecommendationItemsAsync(bot, chatId, items, includeActions: true, ct);
+        await SendRecommendationItemsAsync(bot, chatId, user.Id, items, includeActions: true, ct);
     }
 
     private async Task SetDigestAsync(ITelegramBotClient bot, long chatId, string setting, CancellationToken ct)
@@ -187,7 +190,7 @@ public sealed class TelegramBotJob(
             cancellationToken: ct);
     }
 
-    private async Task HandleCallbackAsync(ITelegramBotClient bot, CallbackQuery callback, CancellationToken ct)
+    internal async Task HandleCallbackAsync(ITelegramBotClient bot, CallbackQuery callback, CancellationToken ct)
     {
         if (callback.Message is not { Chat.Type: ChatType.Private } message ||
             callback.From.Id != message.Chat.Id || callback.Data is not { } data)
@@ -197,11 +200,14 @@ public sealed class TelegramBotJob(
         }
 
         var fields = data.Split(':');
-        var isRequest = fields.Length == 3 && fields[0] == "r";
-        var isFeedback = fields.Length == 4 && fields[0] == "f";
+        var isRequest = fields.Length == 4 && fields[0] == "r";
+        var isFeedback = fields.Length == 5 && fields[0] == "f";
         var typeCode = isRequest ? fields[1] : isFeedback ? fields[2] : "";
         var itemIdField = isRequest ? fields.ElementAtOrDefault(2) : isFeedback ? fields.ElementAtOrDefault(3) : null;
-        if (!TryParseMediaType(typeCode, out var mediaType) || !int.TryParse(itemIdField, out var tmdbId))
+        var profileIdField = isRequest ? fields.ElementAtOrDefault(3) : isFeedback ? fields.ElementAtOrDefault(4) : null;
+        if (!TryParseMediaType(typeCode, out var mediaType) ||
+            !int.TryParse(itemIdField, out var tmdbId) ||
+            !int.TryParse(profileIdField, out var profileId))
         {
             await bot.AnswerCallbackQuery(callback.Id, text: "That action is no longer available.", showAlert: true, cancellationToken: ct);
             return;
@@ -213,6 +219,12 @@ public sealed class TelegramBotJob(
         if (user is null)
         {
             await bot.AnswerCallbackQuery(callback.Id, text: "This chat is no longer linked.", showAlert: true, cancellationToken: ct);
+            return;
+        }
+
+        if (user.Id != profileId)
+        {
+            await bot.AnswerCallbackQuery(callback.Id, text: "This action is no longer available for this profile.", showAlert: true, cancellationToken: ct);
             return;
         }
 
@@ -292,7 +304,7 @@ public sealed class TelegramBotJob(
     }
 
     private static async Task SendRecommendationItemsAsync(
-        ITelegramBotClient bot, long chatId, IReadOnlyList<RecommendationView> items, bool includeActions, CancellationToken ct)
+        ITelegramBotClient bot, long chatId, int profileId, IReadOnlyList<RecommendationView> items, bool includeActions, CancellationToken ct)
     {
         if (items.Count == 0)
         {
@@ -307,11 +319,11 @@ public sealed class TelegramBotJob(
             {
                 var rows = new List<InlineKeyboardButton[]>();
                 if (item.CanRequest)
-                    rows.Add([InlineKeyboardButton.WithCallbackData("Request", $"r:{TypeCode(item.MediaType)}:{item.TmdbId}")]);
+                    rows.Add([InlineKeyboardButton.WithCallbackData("Request", $"r:{TypeCode(item.MediaType)}:{item.TmdbId}:{profileId}")]);
                 rows.Add([
-                    InlineKeyboardButton.WithCallbackData("Like", $"f:l:{TypeCode(item.MediaType)}:{item.TmdbId}"),
-                    InlineKeyboardButton.WithCallbackData("Dislike", $"f:d:{TypeCode(item.MediaType)}:{item.TmdbId}"),
-                    InlineKeyboardButton.WithCallbackData("Not interested", $"f:n:{TypeCode(item.MediaType)}:{item.TmdbId}")
+                    InlineKeyboardButton.WithCallbackData("Like", $"f:l:{TypeCode(item.MediaType)}:{item.TmdbId}:{profileId}"),
+                    InlineKeyboardButton.WithCallbackData("Dislike", $"f:d:{TypeCode(item.MediaType)}:{item.TmdbId}:{profileId}"),
+                    InlineKeyboardButton.WithCallbackData("Not interested", $"f:n:{TypeCode(item.MediaType)}:{item.TmdbId}:{profileId}")
                 ]);
                 keyboard = new InlineKeyboardMarkup(rows);
             }
