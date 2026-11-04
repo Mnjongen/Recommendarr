@@ -118,7 +118,7 @@ public sealed class TelegramBotJob(
         if (string.IsNullOrWhiteSpace(code))
         {
             await bot.SendMessage(chatId,
-                "To link this chat, sign in to Recommendarr and create a code with POST /api/v1/users/{plexUserId}/telegram-link. Then send /start <code> here. Codes expire after 10 minutes.",
+                "To link this chat, sign in to Recommendarr, open Telegram in the navigation, and generate a link code. Then send the returned /start command here. Codes expire after 10 minutes.",
                 cancellationToken: ct);
             return;
         }
