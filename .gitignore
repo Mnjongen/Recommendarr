@@ -488,3 +488,10 @@ appsettings.Local.json
 *.db-shm
 *.db-wal
 *.onnx
+
+# Playwright
+/playwright-report/
+.playwright-data/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

@@ -7,14 +7,18 @@ Recommendarr is a self-hosted "what to watch next" recommender for Plex. It work
 3. It checks whether each title is already on Plex.
 4. For titles that aren't, it lets the user request them through **Seerr** (formerly Overseerr), which hands them to Radarr or Sonarr.
 
-> Status: early development. Milestones 1–5 are done: history and TMDB sync, local embeddings, per-user recommendations with Seerr availability and requests, and a web UI with Plex sign-in and Plex Home profiles. See the roadmap below.
+> Status: milestones 1–5 are complete. Milestone 6 is in progress: the Telegram bot supports private-chat pairing, recommendations, request/feedback actions, and opt-in daily digests. Discord remains planned.
 
-## Features (planned)
-- Per-user recommendations for movies and TV shows. Users sign in with their Plex account.
+## Implemented features
+- Per-user movie and TV recommendations, with Plex sign-in and Plex Home profile selection.
 - Pluggable embeddings: built-in ONNX model, Ollama, or any OpenAI-compatible endpoint.
+- Seerr availability, requests made as the signed-in user, and availability status in recommendations.
+- Web UI and REST API, including recommendation feedback.
+
+## Planned features
+- A Discord bot with recommendation digests.
 - Optional LLM re-ranking with "why you'll like this" explanations.
-- Status badges (On Plex, Requested, and so on), and one-click requests made in Seerr as the signed-in user.
-- Web UI, REST API, and Telegram and Discord bots.
+- Recommendation tuning UI.
 
 ## Running with Docker
 ```sh
@@ -36,6 +40,8 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Tmdb__ApiKey` | TMDB API Read Access Token |
 | `Sync__Interval` | How often history and TMDB metadata are synced (default `06:00:00`) |
 | `Seerr__BaseUrl`, `Seerr__ApiKey` | Seerr connection |
+| `Telegram__BotToken` | Optional Telegram bot token; enables private-chat polling |
+| `Telegram__DigestHourUtc` | UTC hour for opt-in Telegram digests (default `9`) |
 | `Embeddings__Provider` | `Onnx` (default, runs locally; downloads ~130 MB on first run), `Ollama`, `OpenAI` |
 | `Embeddings__Model`, `Embeddings__Endpoint` | Embedding model, plus the endpoint for Ollama or an OpenAI-compatible server. Changing the model re-embeds everything. |
 | `Network__PreferIPv4` | Connect over IPv4 before IPv6 (default `true`). This works around home networks whose IPv6 route drops TLS connections ("The SSL connection could not be established"). |
@@ -44,6 +50,15 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 
 ## Signing in
 Open the web UI and choose **Sign in with Plex**. If several people share one Plex login through Plex Home, Recommendarr then asks **Who's watching?** and requires the profile PIN when one is set. Only profiles that use this server can sign in. The server owner's profile is the admin: they can see everyone's recommendations, start a sync, and choose the Seerr account for each profile.
+
+## Telegram Bot (Early)
+Set `Recommendarr__Telegram__BotToken` to a token from BotFather and restart the app. The bot uses long polling, so no public webhook endpoint is required. Pair only in a private Telegram chat:
+
+1. While signed in as the profile to link, call `POST /api/v1/users/{plexUserId}/telegram-link`.
+2. Send the returned `/start <code>` command to the bot within 10 minutes. The code is single-use.
+3. Use `/recommendations` to view that profile's recommendations, request eligible titles through Seerr, or submit feedback. Use `/digest on` or `/digest off` to manage daily recommendations; `/help` lists commands and `/unlink` disconnects the chat. Digests are sent after the configured UTC hour, at most once per profile per day.
+
+Link codes are generated only for the signed-in profile (or by an admin for a profile they can manage). Telegram IDs or Plex credentials are never accepted as proof of identity. Discord integration is not implemented yet.
 
 ## REST API
 The OpenAPI document is served at `/openapi/v1.json`. The API uses the same sign-in session as the web UI. A profile can only read and request for itself; the admin can act for everyone.
@@ -68,6 +83,15 @@ dotnet run --project src/Recommendarr.Web
 ```
 For local secrets, use `src/Recommendarr.Web/appsettings.Local.json`. Git ignores this file.
 
+Browser smoke tests use Playwright and start the web app with the `Testing` environment and isolated local data in `.playwright-data/`:
+```sh
+npm ci
+npx playwright install firefox  # once per machine
+npm run test:e2e
+npm run test:e2e:report
+```
+The report command binds to IPv4 loopback so it works when `localhost` resolves to IPv6. Current browser coverage is a sign-in-page smoke test; expand it as UI workflows are added, using isolated test data and test-only authentication for signed-in flows.
+
 ## Releasing
 Releases come from version tags, not from every commit. Pushing a tag runs the tests, publishes the Docker image, and creates a GitHub release with generated notes:
 ```sh
@@ -82,5 +106,5 @@ git push origin v0.1.0
 3. ✅ Embedding providers and the recommendation engine
 4. ✅ Seerr availability and requests, REST API
 5. ✅ Blazor UI with Plex sign-in
-6. Telegram and Discord bots, digests
-7. Optional LLM re-ranker, feedback, and tuning UI
+6. Telegram and Discord bots, digests (Telegram integration in progress)
+7. Optional LLM re-ranker and recommendation tuning UI

@@ -25,6 +25,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddRecommendarrInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<SyncCoordinator>();
 builder.Services.AddHostedService<SyncJob>();
+builder.Services.AddHostedService<TelegramBotJob>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<RecommendationReader>();
 builder.Services.AddScoped<RecommendationFeedbackService>();

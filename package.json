@@ -1,0 +1,29 @@
+{
+  "name": "recommendarr",
+  "version": "1.0.0",
+  "description": "Recommendarr is a self-hosted \"what to watch next\" recommender for Plex. It works like this:",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report --host 127.0.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mnjongen/Recommendarr.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Mnjongen/Recommendarr/issues"
+  },
+  "homepage": "https://github.com/Mnjongen/Recommendarr#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6"
+  }
+}

@@ -267,6 +267,15 @@ namespace Recommendarr.Infrastructure.Data.Migrations
                     b.Property<long?>("TelegramChatId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long?>("TelegramDigestSentAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("TelegramLinkCodeExpiresAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TelegramLinkCodeHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ThumbUrl")
                         .HasColumnType("TEXT");
 
@@ -278,6 +287,10 @@ namespace Recommendarr.Infrastructure.Data.Migrations
 
                     b.HasIndex("PlexUserId")
                         .IsUnique();
+
+                    b.HasIndex("TelegramChatId")
+                        .IsUnique()
+                        .HasFilter("\"TelegramChatId\" IS NOT NULL");
 
                     b.ToTable("Users", (string)null);
                 });
