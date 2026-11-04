@@ -43,7 +43,7 @@ Tests use xUnit **v2**: `IAsyncLifetime` returns `Task`, not `ValueTask`.
 1. Sync history.
 2. Resolve each play to a TMDB id and collapse TV episodes to their show.
 3. Fetch TMDB metadata and embed a text document for each item.
-4. Fill the candidate pool from TMDB recommendations, similar titles, and trending lists. Store "seed → candidate" edges as `ItemLinks`.
+4. Fill the candidate pool from each watched title's TMDB recommendations (`Tmdb:RecommendationPages`), similar titles and collection (franchise), plus global lists (trending, popular, top rated, now airing; `Tmdb:ListPages`) and TMDB discover searches for each profile's top genres and main languages (`Sync/DiscoverPlanner`). Titles from lists and discover get `Items.ListedAt`; the evaluator's "Reachable" share counts them. Store "seed → candidate" edges as `ItemLinks` (`Recommendation`, `Similar`, `Collection`; each has its own weight in `RecommendationOptions`).
 5. Build per-user taste centroids: recency-weighted k-means over the vectors of watched items.
 6. Score each candidate: `a·similarity + b·collaborative + c·quality`, minus penalties.
 7. Diversify with MMR.

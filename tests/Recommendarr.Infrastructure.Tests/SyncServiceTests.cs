@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Recommendarr.Core.Abstractions;
 using Recommendarr.Core.Models;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Options;
@@ -118,6 +119,64 @@ public sealed class SyncServiceTests : IAsyncLifetime
         Assert.Contains(new { SourceItemId = matrix, TargetItemId = items[604].Id, Kind = ItemLinkKind.Recommendation }, links);
         Assert.Contains(new { SourceItemId = matrix, TargetItemId = items[604].Id, Kind = ItemLinkKind.Similar }, links);
         Assert.Contains(new { SourceItemId = matrix, TargetItemId = items[27205].Id, Kind = ItemLinkKind.Similar }, links);
+    }
+
+    [Fact]
+    public async Task Catalog_sync_links_a_watched_movies_franchise_and_pulls_in_global_lists()
+    {
+        _history.Users.Add(new PlexUser("1", "alice"));
+        _history.Events.Add(Play("1", MediaType.Movie, "The Fellowship of the Ring", "a", tmdb: 120));
+        await SyncHistoryAsync();
+
+        _metadata.Details[(MediaType.Movie, 120)] = Metadata(MediaType.Movie, 120, "The Fellowship of the Ring") with { CollectionId = 119 };
+        _metadata.Collections[119] =
+        [
+            Ref(MediaType.Movie, 120, "The Fellowship of the Ring"),
+            Ref(MediaType.Movie, 121, "The Two Towers"),
+            Ref(MediaType.Movie, 122, "The Return of the King"),
+        ];
+        // A full first page means there may be more: the second page is requested too.
+        _metadata.Recommendations[(MediaType.Movie, 120)] = Enumerable.Range(1000, 20).Select(id => Ref(MediaType.Movie, id, $"Film {id}")).ToList();
+        _metadata.Lists[(MediaType.Movie, TitleList.TopRated)] = [Ref(MediaType.Movie, 155, "The Dark Knight")];
+        _metadata.Lists[(MediaType.Tv, TitleList.NowAiring)] = [Ref(MediaType.Tv, 37854, "One Piece")];
+
+        await SyncCatalogAsync();
+
+        await using var db = _database.CreateContext();
+        var items = await db.Items.ToDictionaryAsync(i => (i.MediaType, i.TmdbId));
+        Assert.Equal(119, items[(MediaType.Movie, 120)].CollectionId);
+        Assert.Contains((MediaType.Movie, 155), items.Keys);
+        Assert.Contains((MediaType.Tv, 37854), items.Keys);
+        Assert.Equal([1, 2], _metadata.RecommendationCalls.Select(c => c.Page));
+
+        var franchise = await db.ItemLinks.Where(l => l.Kind == ItemLinkKind.Collection).Select(l => l.TargetItemId).ToListAsync();
+        Assert.Equal(
+            new[] { items[(MediaType.Movie, 121)].Id, items[(MediaType.Movie, 122)].Id }.Order(),
+            franchise.Order()); // never linked to itself
+    }
+
+    [Fact]
+    public async Task Catalog_sync_discovers_the_best_known_titles_of_a_profiles_genres_and_languages()
+    {
+        _history.Users.Add(new PlexUser("1", "alice"));
+        _history.Events.Add(Play("1", MediaType.Tv, "Frieren", "a", tmdb: 209867));
+        _history.Events.Add(Play("1", MediaType.Tv, "Dr. Stone", "b", tmdb: 86031));
+        await SyncHistoryAsync();
+
+        _metadata.Details[(MediaType.Tv, 209867)] = Metadata(MediaType.Tv, 209867, "Frieren", "Animation") with { OriginalLanguage = "ja" };
+        _metadata.Details[(MediaType.Tv, 86031)] = Metadata(MediaType.Tv, 86031, "Dr. Stone", "Animation") with { OriginalLanguage = "ja" };
+        _metadata.Genres[MediaType.Tv] = new() { ["Animation"] = 16 };
+        _metadata.Discover[(MediaType.Tv, new DiscoverQuery(16, "ja"))] = [Ref(MediaType.Tv, 37854, "One Piece")];
+        _metadata.Trending[MediaType.Movie] = [Ref(MediaType.Movie, 155, "The Dark Knight")];
+
+        await SyncCatalogAsync();
+
+        Assert.Equal([new DiscoverQuery(16, null), new DiscoverQuery(16, "ja")], _metadata.DiscoverCalls.Select(c => c.Query));
+        await using var db = _database.CreateContext();
+        var items = await db.Items.ToDictionaryAsync(i => i.TmdbId);
+        Assert.Equal(T0, items[37854].ListedAt);
+        Assert.Equal(T0, items[155].ListedAt);
+        Assert.Null(items[209867].ListedAt); // only watched, never listed
     }
 
     [Fact]

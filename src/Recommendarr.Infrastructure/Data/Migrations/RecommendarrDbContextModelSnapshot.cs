@@ -53,6 +53,9 @@ namespace Recommendarr.Infrastructure.Data.Migrations
                     b.Property<double>("Mrr")
                         .HasColumnType("REAL");
 
+                    b.Property<double>("ReachableShare")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("Settings")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -107,6 +110,9 @@ namespace Recommendarr.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CollectionId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Creators")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -124,6 +130,9 @@ namespace Recommendarr.Infrastructure.Data.Migrations
                     b.Property<string>("Keywords")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<long?>("ListedAt")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("MediaType")
                         .IsRequired()

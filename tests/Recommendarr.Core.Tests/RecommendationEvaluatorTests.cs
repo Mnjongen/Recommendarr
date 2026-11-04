@@ -76,8 +76,8 @@ public class RecommendationEvaluatorTests
             new(1, MediaType.Movie, Action, 7, 1000, []),
             new(2, MediaType.Movie, Action, 7, 1000, []),
             new(3, MediaType.Movie, Action, 7, 1000, []),
-            new(4, MediaType.Movie, Action, 7, 1000, [new CandidateLink(2, Collaborative: true)]),
-            new(5, MediaType.Movie, Action, 7, 3, [new CandidateLink(9, Collaborative: true)]), // obscure; linked from an unwatched title
+            new(4, MediaType.Movie, Action, 7, 1000, [new CandidateLink(2, CandidateLinkKind.Recommendation)]),
+            new(5, MediaType.Movie, Action, 7, 3, [new CandidateLink(9, CandidateLinkKind.Recommendation)]), // obscure; linked from an unwatched title
         ];
         UserPlay[] plays = [Play("a", 1, 1), Play("a", 2, 2), Play("a", 3, 3), Play("a", 4, 4), Play("a", 5, 5)];
 
@@ -99,8 +99,8 @@ public class RecommendationEvaluatorTests
         EvaluationTarget[] unembedded =
         [
             new(7, MediaType.Movie, []),
-            new(9, MediaType.Tv, [new CandidateLink(7, Collaborative: true)]),
-            new(10, MediaType.Movie, [new CandidateLink(8, Collaborative: false)]),
+            new(9, MediaType.Tv, [new CandidateLink(7, CandidateLinkKind.Recommendation)]),
+            new(10, MediaType.Movie, [new CandidateLink(8, CandidateLinkKind.Similar)]),
         ];
         UserPlay[] plays =
         [
@@ -130,5 +130,23 @@ public class RecommendationEvaluatorTests
         Assert.Equal(suite.Count, suite.Select(e => e.Name).Distinct().Count());
         Assert.All(suite.Where(e => !e.Name.StartsWith("recency")), e => Assert.Equal(42, e.Options.RecencyHalfLifeDays));
         Assert.Equal(42, baseline.RecencyHalfLifeDays);
+    }
+
+    [Fact]
+    public void Listed_titles_are_reachable_without_a_link()
+    {
+        var vectors = Enumerable.Range(1, 5).ToDictionary(id => id, _ => Action);
+        CandidateItem[] candidates =
+        [
+            .. Enumerable.Range(1, 3).Select(id => new CandidateItem(id, MediaType.Movie, Action, 7, 1000, [])),
+            new(4, MediaType.Movie, Action, 7, 1000, [], Listed: true),
+            new(5, MediaType.Movie, Action, 7, 1000, []),
+        ];
+        UserPlay[] plays = [Play("a", 1, 1), Play("a", 2, 2), Play("a", 3, 3), Play("a", 4, 4), Play("a", 5, 5)];
+
+        var result = RecommendationEvaluator.Evaluate(plays, vectors, candidates, new RecommendationOptions());
+
+        Assert.Equal([(4, false, true), (5, false, false)], result.Cases.Select(c => (c.ItemId, c.Linked, c.Reachable)));
+        Assert.Equal(0.5, result.ReachableShare);
     }
 }

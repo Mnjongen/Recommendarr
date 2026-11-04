@@ -6,8 +6,11 @@ using Recommendarr.Infrastructure.Data;
 
 namespace Recommendarr.Infrastructure.Sync;
 
-/// <summary>Display data for a catalog title. <paramref name="Embedded"/> is false until it has a vector, so the engine can't score it.</summary>
-public sealed record CatalogTitle(int Id, MediaType MediaType, string Title, int? Year, double VoteAverage, int VoteCount, bool Embedded);
+/// <summary>
+/// Display data for a catalog title. <paramref name="Embedded"/> is false until it has a vector, so the engine can't score it.
+/// <paramref name="Listed"/> is true when it came in through a global TMDB list or discover search.
+/// </summary>
+public sealed record CatalogTitle(int Id, MediaType MediaType, string Title, int? Year, double VoteAverage, int VoteCount, bool Embedded, bool Listed);
 
 /// <summary>
 /// The catalog as the engine sees it. Shared by every user, so load it once per run.
@@ -33,26 +36,34 @@ public static class RecommendationInputs
     public static async Task<CatalogSnapshot> LoadCatalogAsync(RecommendarrDbContext db, IVectorStore store, CancellationToken ct = default)
     {
         var items = await db.Items.AsNoTracking()
-            .Select(i => new { i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, Embedded = i.EmbeddedAt != null })
+            .Select(i => new { i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, Embedded = i.EmbeddedAt != null, Listed = i.ListedAt != null })
             .ToListAsync(ct);
         var vectors = await store.GetAsync(items.Where(i => i.Embedded).Select(i => i.Id), ct);
         var links = (await db.ItemLinks.AsNoTracking().ToListAsync(ct)).ToLookup(l => l.TargetItemId);
         List<CandidateLink> LinksTo(int itemId) =>
-            links[itemId].Select(l => new CandidateLink(l.SourceItemId, l.Kind == ItemLinkKind.Recommendation)).ToList();
+            links[itemId].Select(ToCandidateLink).ToList();
 
         var candidates = items
             .Where(i => vectors.ContainsKey(i.Id))
-            .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount, LinksTo(i.Id)))
+            .Select(i => new CandidateItem(i.Id, i.MediaType, vectors[i.Id], i.VoteAverage, i.VoteCount, LinksTo(i.Id), i.Listed))
             .ToList();
         var unembedded = items
             .Where(i => !vectors.ContainsKey(i.Id))
-            .Select(i => new EvaluationTarget(i.Id, i.MediaType, LinksTo(i.Id)))
+            .Select(i => new EvaluationTarget(i.Id, i.MediaType, LinksTo(i.Id), i.Listed))
             .ToList();
         var titles = items.ToDictionary(
             i => i.Id,
-            i => new CatalogTitle(i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, vectors.ContainsKey(i.Id)));
+            i => new CatalogTitle(i.Id, i.MediaType, i.Title, i.Year, i.VoteAverage, i.VoteCount, vectors.ContainsKey(i.Id), i.Listed));
         return new CatalogSnapshot(candidates, vectors, titles, unembedded);
     }
+
+    public static CandidateLink ToCandidateLink(ItemLinkEntity link) => new(link.SourceItemId, link.Kind switch
+    {
+        ItemLinkKind.Recommendation => CandidateLinkKind.Recommendation,
+        ItemLinkKind.Similar => CandidateLinkKind.Similar,
+        ItemLinkKind.Collection => CandidateLinkKind.Collection,
+        _ => throw new ArgumentOutOfRangeException(nameof(link), link.Kind, null),
+    });
 
     public static async Task<UserInputs> LoadUserAsync(
         RecommendarrDbContext db,

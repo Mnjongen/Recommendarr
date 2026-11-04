@@ -40,6 +40,8 @@ All settings live under the `Recommendarr` section, so any of them can be set as
 | `Tautulli__BaseUrl`, `Tautulli__ApiKey` | Tautulli connection |
 | `Plex__BaseUrl`, `Plex__Token` | Plex connection (server owner's token) |
 | `Tmdb__ApiKey` | TMDB API Read Access Token |
+| `Tmdb__RecommendationPages`, `Tmdb__ListPages` | Catalog size: pages (20 titles each) of TMDB recommendations per watched title, and of each global list (trending, popular, top rated, now airing). Default `2` each |
+| `Tmdb__DiscoverGenres`, `Tmdb__DiscoverPages` | TMDB discover searches for each profile's top genres per media type (default `3`) and main non-English languages, such as Japanese for anime; pages per search (default `2`) |
 | `Sync__Interval` | How often history and TMDB metadata are synced (default `06:00:00`) |
 | `Seerr__BaseUrl`, `Seerr__ApiKey` | Seerr connection |
 | `Telegram__BotToken` | Optional Telegram bot token; enables private-chat polling |
@@ -56,7 +58,7 @@ Open the web UI and choose **Sign in with Plex**. If several people share one Pl
 ## Tuning recommendations
 Admins get two extra pages for improving the engine:
 
-- **Quality** (`/admin/quality`) shows what the catalog holds (embedded titles, how many pass the vote filters, TMDB links, unresolved plays per profile). It also runs an offline "next watch" evaluation: for every title a profile watched, it recommends from the earlier history only and records where that title ranked. Evaluate the current settings, a what-if variant, or the full experiment suite (one knob changed at a time). Each run's metrics are stored, so the history table shows whether a bigger catalog or a tuning change helped. *Eligible* is the share of watched titles that passed the vote filters. *Linked* is the share reachable through TMDB links from earlier watches; a low value means catalog expansion misses what people actually watch next.
+- **Quality** (`/admin/quality`) shows what the catalog holds (embedded titles, how many pass the vote filters, TMDB links, unresolved plays per profile). It also runs an offline "next watch" evaluation: for every title a profile watched, it recommends from the earlier history only and records where that title ranked. Evaluate the current settings, a what-if variant, or the full experiment suite (one knob changed at a time). Each run's metrics are stored, so the history table shows whether a bigger catalog or a tuning change helped. *Eligible* is the share of watched titles that passed the vote filters. *Linked* is the share reachable through TMDB links from earlier watches. *Reachable* also counts titles that came in through a global list or discover search. A low value means catalog expansion misses what people actually watch next.
 - **Why this score** (`/admin/explain/{plexUserId}`) shows a profile's taste clusters and, for every candidate, the similarity, collaborative and quality components (normalised and raw), the weighted contribution of each, its rank before and after diversification, and which watched titles link to it. Search for a title to see why it isn't scored (already watched, feedback, too few votes, not embedded). What-if settings rescore the profile without saving anything.
 
 The same evaluation runs from the command line, with extra embedding-text experiments: `dotnet run --project tools/Recommendarr.Eval -- [data-directory]`.

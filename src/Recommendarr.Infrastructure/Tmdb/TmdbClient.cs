@@ -64,17 +64,55 @@ public sealed class TmdbClient : IMetadataSource
             d.PosterPath,
             d.OriginalLanguage,
             d.ExternalIds?.TvdbId,
-            string.IsNullOrWhiteSpace(d.ExternalIds?.ImdbId) ? null : d.ExternalIds.ImdbId);
+            string.IsNullOrWhiteSpace(d.ExternalIds?.ImdbId) ? null : d.ExternalIds.ImdbId,
+            d.BelongsToCollection?.Id);
     }
 
-    public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, CancellationToken ct = default) =>
-        GetListAsync(type, $"{PathFor(type)}/{tmdbId}/recommendations", ct);
+    public Task<IReadOnlyList<MediaReference>> GetRecommendationsAsync(MediaType type, int tmdbId, int page = 1, CancellationToken ct = default) =>
+        GetListAsync(type, $"{PathFor(type)}/{tmdbId}/recommendations?page={page}", ct);
 
     public Task<IReadOnlyList<MediaReference>> GetSimilarAsync(MediaType type, int tmdbId, CancellationToken ct = default) =>
         GetListAsync(type, $"{PathFor(type)}/{tmdbId}/similar", ct);
 
-    public Task<IReadOnlyList<MediaReference>> GetTrendingAsync(MediaType type, CancellationToken ct = default) =>
-        GetListAsync(type, $"trending/{PathFor(type)}/week", ct);
+    public async Task<IReadOnlyList<MediaReference>> GetCollectionAsync(int collectionId, CancellationToken ct = default)
+    {
+        var collection = await GetAsync<CollectionDto>($"collection/{collectionId}", ct);
+        return (collection?.Parts ?? [])
+            .Select(r => new MediaReference(r.Id, MediaType.Movie, r.Title ?? r.Name ?? "", r.VoteAverage, r.VoteCount, r.Popularity))
+            .ToList();
+    }
+
+    public Task<IReadOnlyList<MediaReference>> GetTitleListAsync(MediaType type, TitleList list, int page = 1, CancellationToken ct = default)
+    {
+        var path = list switch
+        {
+            TitleList.Trending => $"trending/{PathFor(type)}/week",
+            TitleList.Popular => $"{PathFor(type)}/popular",
+            TitleList.TopRated => $"{PathFor(type)}/top_rated",
+            TitleList.NowAiring => type == MediaType.Movie ? "movie/now_playing" : "tv/on_the_air",
+            _ => throw new ArgumentOutOfRangeException(nameof(list), list, null),
+        };
+        return GetListAsync(type, $"{path}?page={page}", ct);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> GetGenresAsync(MediaType type, CancellationToken ct = default)
+    {
+        var genres = await GetAsync<GenreListDto>($"genre/{PathFor(type)}/list", ct);
+        return (genres?.Genres ?? [])
+            .Where(g => !string.IsNullOrWhiteSpace(g.Name))
+            .GroupBy(g => g.Name!.Trim())
+            .ToDictionary(g => g.Key, g => g.First().Id);
+    }
+
+    public Task<IReadOnlyList<MediaReference>> DiscoverAsync(MediaType type, DiscoverQuery query, int page = 1, CancellationToken ct = default)
+    {
+        var path = $"discover/{PathFor(type)}?sort_by=vote_count.desc&page={page}";
+        if (query.GenreId is { } genre)
+            path += $"&with_genres={genre}";
+        if (!string.IsNullOrWhiteSpace(query.OriginalLanguage))
+            path += $"&with_original_language={Uri.EscapeDataString(query.OriginalLanguage)}";
+        return GetListAsync(type, path, ct);
+    }
 
     public async Task<int?> FindTmdbIdAsync(MediaType type, int? tvdbId, string? imdbId, CancellationToken ct = default)
     {
@@ -175,6 +213,28 @@ public sealed class TmdbClient : IMetadataSource
         public CreditsDto? Credits { get; init; }
         public CreditsDto? AggregateCredits { get; init; }
         public ExternalIdsDto? ExternalIds { get; init; }
+        public CollectionRefDto? BelongsToCollection { get; init; }
+    }
+
+    private sealed class CollectionRefDto
+    {
+        public int Id { get; init; }
+    }
+
+    private sealed class GenreListDto
+    {
+        public List<GenreDto>? Genres { get; init; }
+    }
+
+    private sealed class GenreDto
+    {
+        public int Id { get; init; }
+        public string? Name { get; init; }
+    }
+
+    private sealed class CollectionDto
+    {
+        public List<ListItemDto>? Parts { get; init; }
     }
 
     private sealed class NamedDto
