@@ -16,6 +16,7 @@ using Recommendarr.Infrastructure.Plex;
 using Recommendarr.Infrastructure.Seerr;
 using Recommendarr.Infrastructure.Sync;
 using Recommendarr.Infrastructure.Tmdb;
+using Recommendarr.Infrastructure.Telegram;
 using Recommendarr.Infrastructure.Vectors;
 using OllamaSharp;
 using OpenAI;
@@ -80,6 +81,7 @@ public static class DependencyInjection
         services.AddHttpClient<ISeerrClient, SeerrClient>()
             .AddStandardResilienceHandler(o => o.Retry.DisableForUnsafeHttpMethods());
         services.AddScoped<SeerrService>();
+        services.AddScoped<TelegramLinkService>();
 
         // plex.tv sign-in. Creating a PIN is a POST, so it must never be retried.
         services.AddHttpClient<PlexAuthClient>()

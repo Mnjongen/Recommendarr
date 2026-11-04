@@ -147,6 +147,8 @@ public sealed class TelegramOptions
     public const string Section = "Recommendarr:Telegram";
 
     public string? BotToken { get; set; }
+
+    public int DigestHourUtc { get; set; } = 9;
 }
 
 public sealed class DiscordOptions

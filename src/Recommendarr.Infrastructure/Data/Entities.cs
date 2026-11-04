@@ -27,9 +27,15 @@ public sealed class UserEntity
 
     public long? TelegramChatId { get; set; }
 
+    public string? TelegramLinkCodeHash { get; set; }
+
+    public DateTimeOffset? TelegramLinkCodeExpiresAt { get; set; }
+
     public ulong? DiscordUserId { get; set; }
 
     public bool DigestEnabled { get; set; }
+
+    public DateTimeOffset? TelegramDigestSentAt { get; set; }
 
     public DateTimeOffset? LastHistorySync { get; set; }
 }

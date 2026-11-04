@@ -111,6 +111,17 @@ public sealed class AuthorizationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData(null, HttpStatusCode.Unauthorized)]
+    [InlineData("2", HttpStatusCode.Forbidden)]
+    [InlineData("3,admin", HttpStatusCode.Forbidden)]
+    [InlineData("1", HttpStatusCode.ServiceUnavailable)]
+    public async Task Telegram_link_codes_are_only_available_to_the_profile_owner(string? profile, HttpStatusCode expected)
+    {
+        var response = await _app.CreateClient(profile).PostAsync("/api/v1/users/1/telegram-link", content: null);
+        Assert.Equal(expected, response.StatusCode);
+    }
+
     [Fact]
     public async Task Feedback_is_saved_for_the_signed_in_profile()
     {

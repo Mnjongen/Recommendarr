@@ -3,8 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Recommendarr.Core.Models;
 using Recommendarr.Infrastructure.Data;
 using Recommendarr.Infrastructure.Seerr;
+using Recommendarr.Infrastructure.Options;
+using Recommendarr.Infrastructure.Telegram;
 using Recommendarr.Web.Auth;
 using Recommendarr.Web.Services;
+using Microsoft.Extensions.Options;
 
 namespace Recommendarr.Web.Api;
 
@@ -33,6 +36,24 @@ public static class RecommendationEndpoints
             return await reader.GetAsync(plexUserId, type, ct) is { } recommendations
                 ? Results.Ok(recommendations)
                 : Results.NotFound();
+        });
+
+        signedIn.MapPost("/users/{plexUserId}/telegram-link", async (
+            string plexUserId, ClaimsPrincipal user, CurrentAdminAuthorization authorization, TelegramLinkService telegram, IOptions<TelegramOptions> options, CancellationToken ct) =>
+        {
+            if (!await authorization.CanActForAsync(user, plexUserId, ct))
+                return Results.Forbid();
+            if (string.IsNullOrWhiteSpace(options.Value.BotToken))
+                return Results.Problem("Telegram is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
+            var result = await telegram.CreateCodeAsync(plexUserId, ct);
+            return result.Status switch
+            {
+                TelegramLinkStatus.Success => Results.Ok(new { result.Code, result.ExpiresAt, Command = $"/start {result.Code}" }),
+                TelegramLinkStatus.UserNotFound => Results.NotFound(),
+                TelegramLinkStatus.AlreadyLinked => Results.Conflict(),
+                _ => Results.Problem("Could not create a Telegram link code.", statusCode: StatusCodes.Status500InternalServerError),
+            };
         });
 
         signedIn.MapPost("/users/{plexUserId}/feedback", async (

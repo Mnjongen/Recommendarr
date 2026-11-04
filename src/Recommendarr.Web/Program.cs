@@ -38,6 +38,9 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
     });
 builder.Services.AddSingleton<SyncCoordinator>();
 builder.Services.AddHostedService<SyncJob>();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<TelegramBotJob>();
+builder.Services.AddHttpClient(TelegramBotJob.HttpClientName).RemoveAllLoggers();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<CurrentAdminAuthorization>();
 builder.Services.AddScoped<ICurrentAdminAuthorization>(sp => sp.GetRequiredService<CurrentAdminAuthorization>());

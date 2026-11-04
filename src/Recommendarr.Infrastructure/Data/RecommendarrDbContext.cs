@@ -31,6 +31,7 @@ public sealed class RecommendarrDbContext(DbContextOptions<RecommendarrDbContext
         {
             e.ToTable("Users");
             e.HasIndex(x => x.PlexUserId).IsUnique();
+            e.HasIndex(x => x.TelegramChatId).IsUnique().HasFilter("\"TelegramChatId\" IS NOT NULL");
         });
 
         b.Entity<WatchEventEntity>(e =>
